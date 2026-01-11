@@ -1,0 +1,30 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+body { 
+    font-family: 'Inter', sans-serif; 
+    background-color: #cbd5e1; 
+    color: #1e293b; 
+    -webkit-font-smoothing: antialiased; 
+}
+.glass { 
+    background: rgba(255, 255, 255, 0.95); 
+    backdrop-filter: blur(12px); 
+    border: 1px solid rgba(255, 255, 255, 0.6); 
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); 
+}
+.neumorphic-input { 
+    background-color: #f8fafc; 
+    border: 1px solid #94a3b8; 
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.06); 
+    transition: all 0.2s; 
+    color: #334155; 
+}
+.neumorphic-input:focus { 
+    background-color: #ffffff; 
+    border-color: #4f46e5; 
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2); 
+    outline: none; 
+}
+.animate-fade-in { animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.modal-overlay { background-color: rgba(15, 23, 42, 0.65); backdrop-filter: blur(4px); }

@@ -2,10 +2,12 @@ const CACHE_NAME = 'ginfi-v5.1-cache-v1';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
+  './style.css',
   './manifest.json',
+  // Iconos (asegúrate de tenerlos)
   './icon-192.png',
   './icon-512.png',
-  // Librerías externas (CDNs) vitales para tu app
+  // CDNs Críticas (Tailwind, Babel, React, Lucide)
   'https://cdn.tailwindcss.com',
   'https://unpkg.com/@babel/standalone/babel.min.js',
   'https://esm.sh/react@18.2.0',
@@ -14,26 +16,24 @@ const ASSETS_TO_CACHE = [
   'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap'
 ];
 
-// 1. Instalación: Cachear recursos estáticos
+// 1. INSTALACIÓN: Cachear recursos estáticos
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[Service Worker] Cacheando archivos base');
+      console.log('[Service Worker] Cacheando archivos core');
       return cache.addAll(ASSETS_TO_CACHE);
     })
   );
   self.skipWaiting();
 });
 
-// 2. Activación: Limpiar caches viejas
+// 2. ACTIVACIÓN: Limpiar caches viejas
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keyList) => {
       return Promise.all(
         keyList.map((key) => {
-          if (key !== CACHE_NAME) {
-            return caches.delete(key);
-          }
+          if (key !== CACHE_NAME) return caches.delete(key);
         })
       );
     })
@@ -41,29 +41,30 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// 3. Fetch: Estrategia Stale-While-Revalidate (Sirve rápido, actualiza en fondo)
+// 3. INTERCEPTACIÓN (FETCH): Estrategia "Cache First, falling back to Network"
 self.addEventListener('fetch', (event) => {
-  // Solo interceptamos peticiones GET http/https
-  if (event.request.method !== 'GET' || !event.request.url.startsWith('http')) return;
+  // Ignorar peticiones que no sean GET (como POST/PUT a APIs si las hubiera)
+  if (event.request.method !== 'GET') return;
 
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
-      const fetchPromise = fetch(event.request).then((networkResponse) => {
-        // Si la respuesta es válida, la guardamos en cache
-        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
-            const responseToCache = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-                cache.put(event.request, responseToCache);
-            });
+      // Si está en cache, retornalo
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+      // Si no, búscalo en la red
+      return fetch(event.request).then((networkResponse) => {
+        // Validar respuesta
+        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic' && networkResponse.type !== 'cors') {
+          return networkResponse;
         }
+        // Clonar y guardar en cache para la próxima
+        const responseToCache = networkResponse.clone();
+        caches.open(CACHE_NAME).then((cache) => {
+          cache.put(event.request, responseToCache);
+        });
         return networkResponse;
-      }).catch(() => {
-         // Si falla la red y no hay cache, podríamos retornar una página offline, 
-         // pero en una SPA la cache debería bastar.
       });
-
-      // Retornar cache si existe, si no, esperar a la red
-      return cachedResponse || fetchPromise;
     })
   );
 });
