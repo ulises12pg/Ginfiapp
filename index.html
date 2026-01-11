@@ -27,6 +27,12 @@
         }
     </script>
     
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        // Configurar el worker de PDF.js
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
+
     <script type="importmap">
     {
       "imports": {
@@ -60,7 +66,7 @@
             Building2, ShoppingCart, Receipt, ArrowDownCircle, ArrowUpCircle, 
             Wallet, Bell, Clock, Database, Upload, AlertCircle, Lock, LogOut, KeyRound, 
             Settings, ShieldCheck, Store, CreditCard, MessageSquare, Edit3, Eye, Truck,
-            Users, AlertTriangle, FileSpreadsheet, CheckCircle
+            Users, AlertTriangle, FileSpreadsheet, CheckCircle, FileSearch
         } from 'lucide-react';
 
         // --- CATALOGOS FISCALES CFDI 4.0 ---
@@ -152,6 +158,7 @@
             const [expenses, setExpenses] = useState([]);
             const [suppliers, setSuppliers] = useState([]);
             const [loading, setLoading] = useState(true);
+            const [isReadingPdf, setIsReadingPdf] = useState(false);
             
             const [deleteConfirmId, setDeleteConfirmId] = useState(null);
             const [editingId, setEditingId] = useState(null); 
@@ -177,16 +184,16 @@
 
             const [expenseData, setExpenseData] = useState({ providerName: '', rfcProvider: '', concept: '', subtotal: 0, iva: 0, total: 0, category: 'mercancia', uuid: '' });
             const [supplierForm, setSupplierForm] = useState({ id: null, name: '', rfc: '' });
-            const [magicInput, setMagicInput] = useState('');
-            const [isProcessingAI, setIsProcessingAI] = useState(false);
-
+            
             useEffect(() => {
                 const session = sessionStorage.getItem('gif4_session');
                 if (session === 'active') setIsAuthenticated(true);
+                // Migración de datos legacy
                 const legacySales = localStorage.getItem('ciber_sales');
                 if(legacySales) { localStorage.setItem('gif4_sales', legacySales); localStorage.removeItem('ciber_sales'); }
                 const legacyExpenses = localStorage.getItem('ciber_expenses');
                 if(legacyExpenses) { localStorage.setItem('gif4_expenses', legacyExpenses); localStorage.removeItem('ciber_expenses'); }
+                
                 setSales(StorageService.getData('gif4_sales'));
                 setExpenses(StorageService.getData('gif4_expenses'));
                 setSuppliers(StorageService.getSuppliers());
@@ -226,6 +233,81 @@
                 else { setLoginError('Contraseña incorrecta'); setLoginPass(''); }
             };
             const handleLogout = () => { sessionStorage.removeItem('gif4_session'); setIsAuthenticated(false); setLoginPass(''); setView('form'); };
+            
+            // --- PDF PARSING LOGIC ---
+            const handlePdfUpload = async (e) => {
+                const file = e.target.files[0];
+                if (!file || file.type !== 'application/pdf') {
+                    showAlert("Error", "Sube un archivo PDF válido.", "error");
+                    return;
+                }
+
+                setIsReadingPdf(true);
+                try {
+                    const arrayBuffer = await file.arrayBuffer();
+                    const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+                    let fullText = '';
+
+                    // Leer solo la primera página (suele contener los totales)
+                    const page = await pdf.getPage(1);
+                    const textContent = await page.getTextContent();
+                    const items = textContent.items.map(item => item.str);
+                    fullText = items.join(' ');
+
+                    console.log("Texto extraído:", fullText); // Debug
+
+                    // Regex para encontrar datos (Optimizado para formatos CFDI México)
+                    // UUID: 8-4-4-4-12 caracteres hex
+                    const uuidMatch = fullText.match(/[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}/);
+                    
+                    // Buscar Total (Busca 'Total' seguido de números, ignora símbolos de moneda)
+                    // Busca el último "Total" que suele ser el final, o cerca de "Total"
+                    // Simplificado: Busca montos grandes cerca de la palabra Total
+                    const totalRegex = /(?:Total|TOTAL|Neto)[:\s]*\$?([\d,]+\.\d{2})/;
+                    // Ejecutamos regex en todo el texto, o buscamos todas las coincidencias
+                    const totalMatches = [...fullText.matchAll(/(?:Total|TOTAL)[:\s]*\$?\s*([\d,]+\.\d{2})/gi)];
+                    let totalVal = 0;
+                    if (totalMatches.length > 0) {
+                        // Tomamos el último que suele ser el total final
+                        const lastMatch = totalMatches[totalMatches.length - 1][1];
+                        totalVal = parseFloat(lastMatch.replace(/,/g, ''));
+                    }
+
+                    // Buscar IVA (Busca 'IVA' o 'Traslado' seguido de monto)
+                    // A veces el IVA está desglosado. Intentamos capturar el monto asociado al 16% o palabra IVA
+                    const ivaMatches = [...fullText.matchAll(/(?:IVA|Traslado|Impuesto)[:\s]*0?\.?160?0?%?[:\s]*\$?\s*([\d,]+\.\d{2})/gi)];
+                    let ivaVal = 0;
+                    if (ivaMatches.length > 0) {
+                         const lastIva = ivaMatches[ivaMatches.length - 1][1];
+                         ivaVal = parseFloat(lastIva.replace(/,/g, ''));
+                    } else if (totalVal > 0) {
+                        // Fallback: Si encontramos Total pero no IVA explícito, inferimos si parece tener IVA
+                        // Esto es arriesgado, mejor dejar en 0 si no encuentra
+                        // O buscar solo la palabra IVA seguida de un monto
+                        const simpleIva = fullText.match(/(?:IVA|I\.V\.A\.)[:\s]*\$?\s*([\d,]+\.\d{2})/i);
+                        if(simpleIva) ivaVal = parseFloat(simpleIva[1].replace(/,/g, ''));
+                    }
+
+                    // Actualizar estado
+                    setExpenseData(prev => ({
+                        ...prev,
+                        uuid: uuidMatch ? uuidMatch[0].toUpperCase() : prev.uuid,
+                        total: totalVal > 0 ? totalVal : prev.total,
+                        iva: ivaVal > 0 ? ivaVal : (totalVal > 0 ? roundPrice(totalVal - (totalVal/1.16)) : 0), // Si encuentra total pero no IVA, sugiere el 16%
+                        subtotal: totalVal > 0 ? roundPrice(totalVal / 1.16) : prev.subtotal,
+                        concept: "Compra según factura adjunta" // Texto por defecto
+                    }));
+
+                    showAlert("PDF Leído", `Datos extraídos: Total $${totalVal}, UUID detectado.`);
+
+                } catch (error) {
+                    console.error(error);
+                    showAlert("Error Lectura", "No se pudo leer el PDF. ¿Es una imagen escaneada?", "error");
+                } finally {
+                    setIsReadingPdf(false);
+                }
+            };
+
             const handleChangePassword = (e) => {
                 e.preventDefault();
                 const storedPass = localStorage.getItem('gif4_password') || 'admin';
@@ -624,7 +706,6 @@
                                                         <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-sm font-bold text-slate-600 dark:text-slate-300">{item.quantity}</div>
                                                         <div>
                                                             <p className="font-medium text-slate-800 dark:text-white">{item.description}</p>
-                                                            {/* DESGLOSE IVA RESTAURADO */}
                                                             {isInvoice && (
                                                                 <div className="flex flex-col sm:flex-row gap-1 sm:gap-2 text-xs text-slate-400 font-mono mt-1">
                                                                     <span>SAT: {item.satKey}</span>
@@ -644,7 +725,6 @@
                                     )}
                                 </div>
                                 <form onSubmit={handleSaveSale}>
-                                    {/* ... Rest of form ... */}
                                     <div className="mb-8">
                                         <h3 className="text-sm font-bold text-slate-400 uppercase mb-4 tracking-wide border-b border-slate-100 dark:border-slate-800 pb-2">Información Complementaria</h3>
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -684,6 +764,24 @@
                             {expenseTab === 'new' ? (
                                 <div className="bg-white rounded-3xl shadow-lg border border-rose-100 p-8">
                                     <div className="flex items-center gap-3 mb-6"><div className="w-10 h-10 rounded-2xl bg-rose-50 dark:bg-rose-900/30 flex items-center justify-center text-rose-600 dark:text-rose-400"><Receipt size={20} /></div><h2 className="text-xl font-bold text-slate-800 dark:text-white">Registrar Gasto</h2></div>
+                                    
+                                    {/* --- SECCION IMPORTAR PDF --- */}
+                                    <div className="mb-6 p-4 border-2 border-dashed border-rose-200 rounded-2xl bg-rose-50/50 hover:bg-rose-50 transition-colors flex items-center justify-center relative">
+                                        <input 
+                                            type="file" 
+                                            accept="application/pdf" 
+                                            onChange={handlePdfUpload} 
+                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                                            disabled={isReadingPdf}
+                                        />
+                                        <div className="flex flex-col items-center gap-2 text-rose-600">
+                                            {isReadingPdf ? <Loader2 className="animate-spin" size={24}/> : <FileSearch size={24}/>}
+                                            <span className="font-bold text-sm">{isReadingPdf ? 'Leyendo PDF...' : 'Subir Ticket (PDF) para Auto-llenado'}</span>
+                                            {!isReadingPdf && <span className="text-xs text-rose-400">Detecta UUID, Total e IVA automáticamente</span>}
+                                        </div>
+                                    </div>
+                                    {/* --------------------------- */}
+
                                     <form onSubmit={handleSaveExpense} className="space-y-4">
                                         <div className="grid grid-cols-2 gap-4">
                                             <div className="col-span-2">
