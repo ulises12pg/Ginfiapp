@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#0f172a">
-    <meta name="description" content="Sistema de Gestión Integral Fiscal y Control Interno v5.0">
-    <title>GINFI 5.5 - Gestión Integral Fiscal</title>
+    <meta name="description" content="Sistema de Gestión Integral Fiscal y Control Interno v5.5">
+    <title>GINFI5.5 - Gestión Integral Fiscal</title>
 
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icon-192.png">
@@ -460,7 +460,7 @@
                 const data = { sales: StorageService.getData('gif4_sales'), expenses: StorageService.getData('gif4_expenses'), suppliers: StorageService.getSuppliers(), meta: { version: "4.0", timestamp: new Date().toISOString(), app: "GIF4.0" } };
                 const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
-                const a = document.createElement('a'); a.href = url; a.download = `Respaldo_GIF5.0_${getLocalDateString()}.json`;
+                const a = document.createElement('a'); a.href = url; a.download = `Respaldo_GINFI5.5_${getLocalDateString()}.json`;
                 document.body.appendChild(a); a.click(); document.body.removeChild(a);
             };
             const handleImportData = (event) => {
@@ -493,7 +493,7 @@
                 const csvString = csvRows.join('\n');
                 const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
                 const url = URL.createObjectURL(blob);
-                const a = document.createElement('a'); a.href = url; a.download = `Datos_GIF5.0_${getLocalDateString()}.csv`;
+                const a = document.createElement('a'); a.href = url; a.download = `Datos_GINFI5.5_${getLocalDateString()}.csv`;
                 document.body.appendChild(a); a.click(); document.body.removeChild(a);
             };
 
@@ -543,7 +543,7 @@
                     <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
                     <head><meta charset="UTF-8"></head>
                     <body>
-                        <h2>REPORTE MENSUAL DE OPERACIONES - GIF5.0</h2>
+                        <h2>REPORTE MENSUAL DE OPERACIONES - GINFI5.5</h2>
                         <h3>Periodo: ${currentMonthStr}</h3>
                         <br>
                         <h3>INGRESOS</h3>
@@ -659,7 +659,7 @@
             };
 
             if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-100 dark:bg-slate-950"><Loader2 className="animate-spin text-slate-400" size={32} /></div>;
-            if (!isAuthenticated) return (<div className="min-h-screen flex items-center justify-center bg-[#cbd5e1] p-6 animate-fade-in"><div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-3xl shadow-2xl p-8 w-full max-w-sm border border-white dark:border-slate-800"><div className="text-center mb-8"><div className="bg-indigo-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-indigo-500/30"><Lock size={32} className="text-white" /></div><h1 className="text-2xl font-bold text-slate-800 dark:text-white">GINFI5.5 Acceso</h1><p className="text-slate-500 text-sm mt-1">Control Interno Seguro</p></div><form onSubmit={handleLogin} className="space-y-4"><div className="relative"><span className="absolute left-4 top-3.5 text-slate-400"><KeyRound size={20} /></span><input type="password" placeholder="Contraseña" value={loginPass} onChange={(e) => {setLoginPass(e.target.value); setLoginError('');}} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl py-3 pl-11 pr-4 text-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all" autoFocus /></div>{loginError && <div className="text-red-500 text-sm text-center font-medium bg-red-50 p-2 rounded-lg">{loginError}</div>}<button type="submit" className="w-full bg-slate-900 hover:bg-black dark:bg-indigo-600 dark:hover:bg-indigo-700 text-white py-3.5 rounded-xl font-bold shadow-lg transform active:scale-95 transition-all">Ingresar</button></form><p className="text-center text-xs text-slate-400 mt-6">Versión 5.5 Final</p></div></div>);
+            if (!isAuthenticated) return (<div className="min-h-screen flex items-center justify-center bg-[#cbd5e1] p-6 animate-fade-in"><div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-3xl shadow-2xl p-8 w-full max-w-sm border border-white dark:border-slate-800"><div className="text-center mb-8"><div className="bg-indigo-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-indigo-500/30"><Lock size={32} className="text-white" /></div><h1 className="text-2xl font-bold text-slate-800 dark:text-white">GINFI 5.5 Acceso</h1><p className="text-slate-500 text-sm mt-1">Control Interno Seguro</p></div><form onSubmit={handleLogin} className="space-y-4"><div className="relative"><span className="absolute left-4 top-3.5 text-slate-400"><KeyRound size={20} /></span><input type="password" placeholder="Contraseña" value={loginPass} onChange={(e) => {setLoginPass(e.target.value); setLoginError('');}} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl py-3 pl-11 pr-4 text-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all" autoFocus /></div>{loginError && <div className="text-red-500 text-sm text-center font-medium bg-red-50 p-2 rounded-lg">{loginError}</div>}<button type="submit" className="w-full bg-slate-900 hover:bg-black dark:bg-indigo-600 dark:hover:bg-indigo-700 text-white py-3.5 rounded-xl font-bold shadow-lg transform active:scale-95 transition-all">Ingresar</button></form><p className="text-center text-xs text-slate-400 mt-6">Versión 5.5 Final</p></div></div>);
 
             const currentSubtotal = roundPrice(currentItems.reduce((a,b) => a + b.subtotal, 0));
             const currentIva = roundPrice(currentItems.reduce((a,b) => a + b.iva, 0));
@@ -682,7 +682,7 @@
                     </div>
 
                     <header className="max-w-4xl mx-auto pt-28 px-6 pb-2 flex justify-between items-end no-print">
-                        <div><h1 className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">GINFI5.5</h1><p className="text-slate-500 dark:text-slate-400 font-medium mt-1">Gestión Integral Fiscal</p></div>
+                        <div><h1 className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">GINFI 5.5</h1><p className="text-slate-500 dark:text-slate-400 font-medium mt-1">Gestión Integral Fiscal</p></div>
                         <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-800 border-2 border-white dark:border-slate-700 shadow-md overflow-hidden flex items-center justify-center"><User size={20} className="text-slate-500 dark:text-slate-300" /></div>
                     </header>
                     <div className="max-w-4xl mx-auto px-6"><TaxReminder /></div>
