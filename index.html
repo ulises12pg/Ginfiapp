@@ -171,7 +171,7 @@
             const [transactionDate, setTransactionDate] = useState(getLocalDateString());
             const [dateError, setDateError] = useState(false); 
             const [currentItems, setCurrentItems] = useState([]);
-            const [newItem, setNewItem] = useState({ description: '', quantity: 1, unitPrice: 0, satKey: '82101603', unitKey: 'E48', type: 'servicio' });
+            const [newItem, setNewItem] = useState({ description: '', quantity: 1, unitPrice: 0, satKey: '01010101', unitKey: 'ACT', type: 'servicio' });
             const [isInvoice, setIsInvoice] = useState(false);
             const [clientName, setClientName] = useState('Público en General');
             const [rfc, setRfc] = useState('');
@@ -285,31 +285,51 @@
 
                     } else if (context === 'sales') {
                         // --- Lógica para VENTAS (Tickets CronoSys) ---
-                        // 1. Buscar Folio (Formato usual en tickets: "Folio: 123", "Ticket #123")
-                        const folioMatch = fullText.match(/(?:Folio|Ticket|Nota|Venta)[:\s]*#?(\d+)/i);
+                        // 1. Buscar Folio (Soporte para alfanuméricos ej. UF-200126-542)
+                        const folioMatch = fullText.match(/(?:Folio|Ticket|Nota|Venta)[:\s]*#?([A-Z0-9\-\.]+)/i);
                         const folioFound = folioMatch ? folioMatch[1] : '';
 
-                        // 2. Buscar Total (Generalmente al final del ticket)
-                        const totalMatches = [...fullText.matchAll(/(?:Total|Pagar|Importe)[:\s]*\$?\s*([\d,]+\.\d{2})/gi)];
+                        // 2. Buscar Total
+                        const totalMatches = [...fullText.matchAll(/(?:Total|Pagar|Importe|Neto)[:\s]*\$?\s*([\d,]+\.\d{2})/gi)];
                         let totalVal = 0;
                         if (totalMatches.length > 0) {
-                            // En tickets el total suele ser el último número grande asociado a "Total"
                             totalVal = parseFloat(totalMatches[totalMatches.length - 1][1].replace(/,/g, ''));
                         }
 
-                        // 3. Rellenar campos para Agregar Item
-                        if(folioFound) setFolioInput(folioFound); // Sugerir folio general
+                        // 3. Detectar Concepto (Mayor Monto)
+                        const conceptMatches = [...fullText.matchAll(/([a-zA-Z0-9ñÑ\s\.\-\/%]+)(?:\$|)\s*([\d,]+\.\d{2})/g)];
+                        let bestConcept = "Venta General";
+                        let maxConceptAmount = -1;
+                        const ignoreWords = ['TOTAL', 'SUBTOTAL', 'IVA', 'I.V.A.', 'CAMBIO', 'EFECTIVO', 'PAGAR', 'IMPORTE', 'RECIBIDO', 'SU PAGO', 'VISA', 'MASTERCARD', 'AMEX', 'DEBITO', 'CREDITO'];
+
+                        conceptMatches.forEach(match => {
+                            let text = match[1].trim();
+                            const val = parseFloat(match[2].replace(/,/g, ''));
+                            const upper = text.toUpperCase();
+                            if (ignoreWords.some(w => upper.includes(w))) return;
+                            if (val > maxConceptAmount && (totalVal === 0 || val <= totalVal)) {
+                                maxConceptAmount = val;
+                                text = text.replace(/\s+/g, ' ').trim();
+                                if (text.length > 40) text = text.split(' ').slice(-5).join(' ');
+                                bestConcept = text;
+                            }
+                        });
+
+                        // 4. Rellenar campos
+                        if(folioFound && /^\d+$/.test(folioFound)) setFolioInput(folioFound);
+                        if(folioFound) setSaleComments(`Ref. Ticket: ${folioFound}`);
+                        const finalDesc = folioFound ? `Folio: ${folioFound}` : bestConcept;
                         
                         setNewItem({
-                            description: `Ticket ${folioFound ? '#' + folioFound : '(Ref. PDF)'}`,
+                            description: finalDesc,
                             quantity: 1,
-                            unitPrice: totalVal > 0 ? totalVal : 0,
+                            unitPrice: totalVal > 0 ? totalVal : (maxConceptAmount > 0 ? maxConceptAmount : 0),
                             satKey: '01010101', // Público general por defecto para tickets
                             unitKey: 'ACT',
                             type: 'servicio'
                         });
 
-                        showAlert("Ticket Leído", `Detectado: Folio ${folioFound || 'N/A'}, Total $${totalVal}`);
+                        showAlert("Ticket Leído", `Concepto: ${bestConcept}, Folio: ${folioFound || 'N/A'}`);
                     }
 
                 } catch (error) {
@@ -351,7 +371,7 @@
                 if (!newItem.description || !newItem.unitPrice) return;
                 const item = calculateItemValues(parseFloat(newItem.unitPrice), parseInt(newItem.quantity) || 1, isInvoice, newItem);
                 setCurrentItems([...currentItems, item]);
-                setNewItem({ description: '', quantity: 1, unitPrice: 0, satKey: '82101603', unitKey: 'E48', type: 'servicio' }); 
+                setNewItem({ description: '', quantity: 1, unitPrice: 0, satKey: '01010101', unitKey: 'ACT', type: 'servicio' }); 
             };
 
             const handleSaveSale = (e) => {
@@ -385,7 +405,7 @@
                 setCurrentItems([]); setIsInvoice(false); setClientName('Público en General'); setRfc(''); setCp('');
                 setSaleComments(''); setSalesChannel('Tienda Física'); setPaymentMethod('Efectivo');
                 setEditingId(null); setTransactionDate(getLocalDateString()); setFolioInput(''); 
-                setNewItem({ description: '', quantity: 1, unitPrice: 0, satKey: '82101603', unitKey: 'E48', type: 'servicio' });
+                setNewItem({ description: '', quantity: 1, unitPrice: 0, satKey: '01010101', unitKey: 'ACT', type: 'servicio' });
             };
 
             const handleSaveExpense = (e) => {
