@@ -70,7 +70,8 @@
 
         // --- CATALOGOS Y DATOS ---
         const SAT_CATALOG = [
-            { key: '43212100', label: 'Servicio: Servicio Técnico', type: 'producto', unit: 'H87' },
+            { key: '80101507', label: 'Servicio: Consultoría Informática', type: 'servicio', unit: 'E48' },
+            { key: '43212100', label: 'Servicio: Servicio Técnico Impresoras', type: 'producto', unit: 'H87' },
             { key: '81112200', label: 'Servicio: Configuración Software', type: 'servicio', unit: 'E48' },
             { key: '43231500', label: 'Producto: Licencias (Office/Antivirus)', type: 'producto', unit: 'E48' },
             { key: '82101603', label: 'Servicio: Renta Computadoras', type: 'servicio', unit: 'E48' },
@@ -549,18 +550,32 @@
                         <h3>INGRESOS</h3>
                         <table border="1">
                             <thead>
-                                <tr style="background-color: #d1fae5;"><th>Fecha</th><th>Folio</th><th>Cliente</th><th>RFC</th><th>Concepto</th><th>Base</th><th>IVA</th><th>Total</th></tr>
+                                <tr style="background-color: #d1fae5;">
+                                    <th>Fecha</th><th>Folio</th><th>Cliente</th><th>RFC</th><th>Concepto</th>
+                                    <th>Canal Venta</th><th>Método Pago</th><th>Comentarios</th>
+                                    <th>Base</th><th>IVA</th><th>Ret. ISR</th><th>Total</th>
+                                </tr>
                             </thead>
                             <tbody>
                                 ${mSales.map(s => `<tr>
-                                    <td>${s.date}</td><td>${s.folio}</td><td>${s.clientName}</td><td>${s.rfc}</td>
-                                    <td>${s.items.map(i=>i.description).join('; ')}</td>
-                                    <td>${s.subtotal}</td><td>${s.iva}</td><td>${s.total}</td>
+                                    <td>${s.date}</td>
+                                    <td>${s.folio}</td>
+                                    <td>${normalizeText(s.clientName)}</td>
+                                    <td>${s.rfc}</td>
+                                    <td>${normalizeText(s.items.map(i=>i.description).join('; '))}</td>
+                                    <td>${s.salesChannel || 'N/A'}</td>
+                                    <td>${s.paymentMethod || 'N/A'}</td>
+                                    <td>${normalizeText(s.saleComments || '')}</td>
+                                    <td>${s.subtotal}</td>
+                                    <td>${s.iva}</td>
+                                    <td>${s.retentionIsr || 0}</td>
+                                    <td>${s.total}</td>
                                 </tr>`).join('')}
                                 <tr style="font-weight:bold;">
-                                    <td colspan="5" align="right">TOTALES</td>
+                                    <td colspan="8" align="right">TOTALES</td>
                                     <td>${roundPrice(mSales.reduce((a,b)=>a+b.subtotal,0))}</td>
                                     <td>${roundPrice(mSales.reduce((a,b)=>a+b.iva,0))}</td>
+                                    <td>${roundPrice(mSales.reduce((a, b) => a + (b.retentionIsr || 0), 0))}</td>
                                     <td>${roundPrice(mSales.reduce((a,b)=>a+b.total,0))}</td>
                                 </tr>
                             </tbody>
@@ -569,16 +584,16 @@
                         <h3>GASTOS</h3>
                         <table border="1">
                             <thead>
-                                <tr style="background-color: #ffe4e6;"><th>Fecha</th><th>UUID</th><th>Proveedor</th><th>RFC</th><th>Concepto</th><th>Base</th><th>IVA</th><th>Total</th></tr>
+                                <tr style="background-color: #ffe4e6;"><th>Fecha</th><th>UUID</th><th>Proveedor</th><th>RFC</th><th>Concepto</th><th>Categoría</th><th>Base</th><th>IVA</th><th>Total</th></tr>
                             </thead>
                             <tbody>
                                 ${mExpenses.map(e => `<tr>
-                                    <td>${e.date}</td><td>${e.uuid}</td><td>${e.providerName}</td><td>${e.rfcProvider}</td>
-                                    <td>${e.concept}</td>
+                                    <td>${e.date}</td><td>${e.uuid || 'N/A'}</td><td>${normalizeText(e.providerName)}</td><td>${e.rfcProvider}</td>
+                                    <td>${normalizeText(e.concept)}</td><td>${e.category}</td>
                                     <td>${e.subtotal}</td><td>${e.iva}</td><td>${e.total}</td>
                                 </tr>`).join('')}
                                 <tr style="font-weight:bold;">
-                                    <td colspan="5" align="right">TOTALES</td>
+                                    <td colspan="6" align="right">TOTALES</td>
                                     <td>${roundPrice(mExpenses.reduce((a,b)=>a+b.subtotal,0))}</td>
                                     <td>${roundPrice(mExpenses.reduce((a,b)=>a+b.iva,0))}</td>
                                     <td>${roundPrice(mExpenses.reduce((a,b)=>a+b.total,0))}</td>
@@ -586,20 +601,19 @@
                             </tbody>
                         </table>
                         <br>
-                        <h3>AUDITORÍA DETALLADA (MOVIMIENTOS)</h3>
+                        <h3>AUDITORÍA DETALLADA (MOVIMIENTOS DEL MES)</h3>
                         <table border="1">
                             <thead>
                                 <tr style="background-color: #e0f2fe;"><th>Fecha</th><th>Tipo</th><th>Ref</th><th>Nombre</th><th>Concepto</th><th>Monto Total</th></tr>
                             </thead>
                             <tbody>
-                                ${[...mSales.map(s => ({...s, kind: 'venta'})), ...mExpenses.map(e => ({...e, kind: 'gasto'}))]
-                                    .sort((a,b)=> new Date(a.date).getTime() - new Date(b.date).getTime())
+                                ${[...mSales.map(s => ({...s, kind: 'venta'})), ...mExpenses.map(e => ({...e, kind: 'gasto'}))].sort((a,b)=> new Date(a.date).getTime() - new Date(b.date).getTime())
                                     .map(m => `<tr>
                                         <td>${m.date}</td>
                                         <td>${m.kind === 'venta' ? 'INGRESO' : 'EGRESO'}</td>
                                         <td>${m.kind === 'venta' ? m.folio : (m.uuid || 'N/A')}</td>
-                                        <td>${m.kind === 'venta' ? m.clientName : m.providerName}</td>
-                                        <td>${m.kind === 'venta' ? (m.items && m.items[0]?.description) : m.concept}</td>
+                                        <td>${normalizeText(m.kind === 'venta' ? m.clientName : m.providerName)}</td>
+                                        <td>${normalizeText(m.kind === 'venta' ? (m.items.map(i=>i.description).join('; ')) : m.concept)}</td>
                                         <td>${m.total}</td>
                                     </tr>`).join('')}
                             </tbody>
