@@ -217,7 +217,7 @@
             const formatMoney = (amount) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(amount);
             const formatDate = (dateString) => {
                 if (!dateString) return '';
-                const parts = dateString.split('-'); return `${parts[2]}/${parts[1]}/${parts[0]}`; 
+                const parts = dateString.split('-'); return `${parts[2]}:${parts[1]}:${parts[0]}`; 
             };
             
             const showAlert = (title, message, type = 'success') => {
@@ -504,33 +504,52 @@
                 const reader = new FileReader();
                 reader.onload = (e) => {
                     try {
-                        const content = e.target.result; const lines = content.split('\n');
+                        const content = e.target.result; const lines = content.split(/\r?\n/);
                         if (lines.length < 2) throw new Error("Archivo vacío");
-                        let sCount = 0; let eCount = 0;
+                        let sCount = 0; let eCount = 0; let errCount = 0;
                         const newSales = [...sales]; const newExpenses = [...expenses];
+                        
+                        // Parser robusto para CSV que respeta comillas y comas internas
+                        const parseCSVLine = (str) => {
+                            const res = []; let cur = ''; let inQ = false;
+                            for (let i = 0; i < str.length; i++) {
+                                const c = str[i];
+                                if (inQ && c === '"' && str[i+1] === '"') { cur += '"'; i++; } // Comillas escapadas
+                                else if (c === '"') { inQ = !inQ; } // Toggle comillas
+                                else if (c === ',' && !inQ) { res.push(cur); cur = ''; } // Separador
+                                else { cur += c; }
+                            }
+                            res.push(cur);
+                            return res.map(x => x.trim());
+                        };
+
                         for (let i = 1; i < lines.length; i++) {
                             const line = lines[i].trim(); if (!line) continue;
-                            const cols = line.split(',').map(c => c.replace(/^"|"$/g, ''));
-                            if (cols.length < 9) continue;
-                            const type = cols[0]; const date = cols[1];
-                            if (type === 'VENTA') {
-                                newSales.push({
-                                    id: generateId(), date: date, folio: parseInt(cols[2]) || 0, type: 'publico_general', clientName: cols[3], rfc: cols[4], 
-                                    items: [{ description: cols[5], quantity: 1, unitPrice: parseFloat(cols[8]), total: parseFloat(cols[8]) }], 
-                                    subtotal: parseFloat(cols[6]), iva: parseFloat(cols[7]), total: parseFloat(cols[8]), saleComments: cols[9],
-                                    salesChannel: 'Tienda Física', paymentMethod: 'Efectivo' 
-                                }); sCount++;
-                            } else if (type === 'GASTO') {
-                                newExpenses.push({
-                                    id: generateId(), date: date, uuid: cols[2] !== 'N/A' ? cols[2] : '', providerName: cols[3], rfcProvider: cols[4], 
-                                    concept: cols[5], subtotal: parseFloat(cols[6]), iva: parseFloat(cols[7]), total: parseFloat(cols[8]), category: cols[9]
-                                }); eCount++;
-                            }
+                            try {
+                                const cols = parseCSVLine(line);
+                                if (cols.length < 9) { errCount++; continue; }
+                                const type = cols[0].toUpperCase(); const date = cols[1];
+                                if (!date.match(/^\d{4}-\d{2}-\d{2}$/)) { errCount++; continue; } // Validar fecha YYYY-MM-DD
+
+                                if (type === 'VENTA') {
+                                    newSales.push({
+                                        id: generateId(), date: date, folio: parseInt(cols[2]) || 0, type: 'publico_general', clientName: cols[3] || 'Cliente CSV', rfc: cols[4] || 'XAXX010101000', 
+                                        items: [{ description: cols[5] || 'Venta Importada', quantity: 1, unitPrice: parseFloat(cols[8]) || 0, total: parseFloat(cols[8]) || 0 }], 
+                                        subtotal: parseFloat(cols[6]) || 0, iva: parseFloat(cols[7]) || 0, total: parseFloat(cols[8]) || 0, saleComments: cols[9] || '',
+                                        salesChannel: 'Tienda Física', paymentMethod: 'Efectivo' 
+                                    }); sCount++;
+                                } else if (type === 'GASTO') {
+                                    newExpenses.push({
+                                        id: generateId(), date: date, uuid: (cols[2] && cols[2] !== 'N/A') ? cols[2] : '', providerName: cols[3] || 'Proveedor CSV', rfcProvider: cols[4] || 'XAXX010101000', 
+                                        concept: cols[5] || 'Gasto Importado', subtotal: parseFloat(cols[6]) || 0, iva: parseFloat(cols[7]) || 0, total: parseFloat(cols[8]) || 0, category: cols[9] || 'otros'
+                                    }); eCount++;
+                                } else { errCount++; }
+                            } catch (err) { errCount++; }
                         }
                         StorageService.saveData('gif4_sales', newSales); StorageService.saveData('gif4_expenses', newExpenses);
                         setSales(newSales); setExpenses(newExpenses);
-                        showAlert('Importación CSV Exitosa', `Se agregaron: ${sCount} ventas y ${eCount} gastos.`);
-                    } catch (error) { showAlert('Error CSV', 'Formato inválido.', 'error'); }
+                        showAlert('Importación Finalizada', `Procesados: ${sCount} ventas, ${eCount} gastos. ${errCount > 0 ? `(${errCount} omitidos por error)` : ''}`, errCount > 0 ? 'warning' : 'success');
+                    } catch (error) { showAlert('Error CSV', 'No se pudo leer el archivo.', 'error'); }
                 };
                 reader.readAsText(file);
             };
@@ -558,7 +577,7 @@
                             </thead>
                             <tbody>
                                 ${mSales.map(s => `<tr>
-                                    <td>${s.date}</td>
+                                    <td>${formatDate(s.date)}</td>
                                     <td>${s.folio}</td>
                                     <td>${normalizeText(s.clientName)}</td>
                                     <td>${s.rfc}</td>
@@ -588,7 +607,7 @@
                             </thead>
                             <tbody>
                                 ${mExpenses.map(e => `<tr>
-                                    <td>${e.date}</td><td>${e.uuid || 'N/A'}</td><td>${normalizeText(e.providerName)}</td><td>${e.rfcProvider}</td>
+                                    <td>${formatDate(e.date)}</td><td>${e.uuid || 'N/A'}</td><td>${normalizeText(e.providerName)}</td><td>${e.rfcProvider}</td>
                                     <td>${normalizeText(e.concept)}</td><td>${e.category}</td>
                                     <td>${e.subtotal}</td><td>${e.iva}</td><td>${e.total}</td>
                                 </tr>`).join('')}
@@ -609,7 +628,7 @@
                             <tbody>
                                 ${[...mSales.map(s => ({...s, kind: 'venta'})), ...mExpenses.map(e => ({...e, kind: 'gasto'}))].sort((a,b)=> new Date(a.date).getTime() - new Date(b.date).getTime())
                                     .map(m => `<tr>
-                                        <td>${m.date}</td>
+                                        <td>${formatDate(m.date)}</td>
                                         <td>${m.kind === 'venta' ? 'INGRESO' : 'EGRESO'}</td>
                                         <td>${m.kind === 'venta' ? m.folio : (m.uuid || 'N/A')}</td>
                                         <td>${normalizeText(m.kind === 'venta' ? m.clientName : m.providerName)}</td>
