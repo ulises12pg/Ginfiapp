@@ -41,6 +41,8 @@
       }
     }
     </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
 <body>
@@ -98,6 +100,15 @@
             { code: 'S01', label: 'S01 - Sin efectos fiscales' },
         ];
         
+        const FISCAL_REGIMES = [
+            { code: '616', label: '616 - Sin obligaciones fiscales' },
+            { code: '626', label: '626 - RESICO' },
+            { code: '601', label: '601 - General de Ley Personas Morales' },
+            { code: '603', label: '603 - Personas Morales con Fines no Lucrativos' },
+            { code: '612', label: '612 - Personas Físicas Actividades Empresariales' },
+            { code: '621', label: '621 - Incorporación Fiscal' },
+        ];
+
         const SALES_CHANNELS = ['Tienda Física', 'Venta en línea', 'Redes Sociales', 'Marketplace', 'Teléfono/WhatsApp', 'Otro'];
         const PAYMENT_METHODS = ['Efectivo', 'Tarjeta de Crédito', 'Tarjeta de Débito', 'Transferencia', 'Cheque', 'Por Definir'];
 
@@ -171,16 +182,19 @@
             const [transactionDate, setTransactionDate] = useState(getLocalDateString());
             const [dateError, setDateError] = useState(false); 
             const [currentItems, setCurrentItems] = useState([]);
-            const [newItem, setNewItem] = useState({ description: '', quantity: 1, unitPrice: 0, satKey: '01010101', unitKey: 'ACT', type: 'servicio' });
+            const [newItem, setNewItem] = useState({ description: '', quantity: 1, unitPrice: 0, satKey: '01010101', unitKey: 'ACT', type: 'servicio', taxRate: 0.16 });
             const [isInvoice, setIsInvoice] = useState(false);
             const [clientName, setClientName] = useState('Público en General');
             const [rfc, setRfc] = useState('');
             const [cp, setCp] = useState('');
             const [usoCfdi, setUsoCfdi] = useState('G03');
+            const [clientRegime, setClientRegime] = useState('616');
             const [salesChannel, setSalesChannel] = useState('Tienda Física');
             const [paymentMethod, setPaymentMethod] = useState('Efectivo');
             const [saleComments, setSaleComments] = useState('');
             const [folioInput, setFolioInput] = useState(''); 
+            const [reportMonth, setReportMonth] = useState(getLocalDateString().slice(0, 7));
+            const [userConfig, setUserConfig] = useState({ postalCode: '' });
 
             const [expenseData, setExpenseData] = useState({ providerName: '', rfcProvider: '', concept: '', subtotal: 0, iva: 0, total: 0, category: 'mercancia', uuid: '' });
             const [supplierForm, setSupplierForm] = useState({ id: null, name: '', rfc: '' });
@@ -196,6 +210,8 @@
                 setSales(StorageService.getData('gif4_sales'));
                 setExpenses(StorageService.getData('gif4_expenses'));
                 setSuppliers(StorageService.getSuppliers());
+                const storedConfig = localStorage.getItem('gif4_config');
+                if (storedConfig) setUserConfig(JSON.parse(storedConfig));
                 setLoading(false);
             }, []);
 
@@ -206,7 +222,7 @@
 
             useEffect(() => {
                 if (currentItems.length > 0) {
-                    const recalculatedItems = currentItems.map(item => calculateItemValues(item.unitPrice, item.quantity, isInvoice, item));
+                    const recalculatedItems = currentItems.map(item => calculateItemValues(item.unitPrice, item.quantity, isInvoice, item.taxRate, item));
                     const oldTotal = currentItems.reduce((acc, i) => acc + i.total, 0);
                     const newTotal = recalculatedItems.reduce((acc, i) => acc + i.total, 0);
                     if (Math.abs(oldTotal - newTotal) > 0.01) setCurrentItems(recalculatedItems);
@@ -326,7 +342,8 @@
                             unitPrice: totalVal > 0 ? totalVal : (maxConceptAmount > 0 ? maxConceptAmount : 0),
                             satKey: '01010101', // Público general por defecto para tickets
                             unitKey: 'ACT',
-                            type: 'servicio'
+                            type: 'servicio',
+                            taxRate: 0.16
                         });
 
                         showAlert("Ticket Leído", `Concepto: ${bestConcept}, Folio: ${folioFound || 'N/A'}`);
@@ -351,27 +368,34 @@
                 setTimeout(() => setPassMessage({ text: '', type: '' }), 3000);
             };
 
-            const calculateItemValues = (inputPrice, qty, invoiceMode, existingItem = null) => {
+            const calculateItemValues = (inputPrice, qty, invoiceMode, taxRate = 0.16, existingItem = null) => {
                 let subtotalLine = 0, ivaLine = 0, totalLine = 0;
                 inputPrice = parseFloat(inputPrice) || 0;
                 qty = parseInt(qty) || 1;
-                if (invoiceMode) { subtotalLine = roundPrice(inputPrice * qty); ivaLine = roundPrice(subtotalLine * 0.16); totalLine = roundPrice(subtotalLine + ivaLine); } 
-                else { totalLine = roundPrice(inputPrice * qty); subtotalLine = roundPrice(totalLine / 1.16); ivaLine = roundPrice(totalLine - subtotalLine); }
+                const taxFactor = 1 + taxRate;
+                if (invoiceMode) { subtotalLine = roundPrice(inputPrice * qty); ivaLine = roundPrice(subtotalLine * taxRate); totalLine = roundPrice(subtotalLine + ivaLine); } 
+                else { totalLine = roundPrice(inputPrice * qty); subtotalLine = roundPrice(totalLine / taxFactor); ivaLine = roundPrice(totalLine - subtotalLine); }
                 return { 
                     id: existingItem?.id || generateId(), 
                     description: existingItem?.description || '', 
                     satKey: existingItem?.satKey || '01010101', 
                     unitKey: existingItem?.unitKey || 'E48',
                     type: existingItem?.type || 'servicio', 
-                    quantity: qty, unitPrice: inputPrice, subtotal: subtotalLine, iva: ivaLine, total: totalLine 
+                    taxRate: taxRate, quantity: qty, unitPrice: inputPrice, subtotal: subtotalLine, iva: ivaLine, total: totalLine 
                 };
             };
 
             const addItem = () => {
                 if (!newItem.description || !newItem.unitPrice) return;
-                const item = calculateItemValues(parseFloat(newItem.unitPrice), parseInt(newItem.quantity) || 1, isInvoice, newItem);
+                const item = calculateItemValues(parseFloat(newItem.unitPrice), parseInt(newItem.quantity) || 1, isInvoice, newItem.taxRate, newItem);
                 setCurrentItems([...currentItems, item]);
-                setNewItem({ description: '', quantity: 1, unitPrice: 0, satKey: '01010101', unitKey: 'ACT', type: 'servicio' }); 
+                setNewItem({ description: '', quantity: 1, unitPrice: 0, satKey: '01010101', unitKey: 'ACT', type: 'servicio', taxRate: 0.16 }); 
+            };
+
+            const handleSaveConfig = (e) => {
+                e.preventDefault();
+                localStorage.setItem('gif4_config', JSON.stringify(userConfig));
+                showAlert('Configuración Guardada', 'Tus datos fiscales se han actualizado.');
             };
 
             const handleSaveSale = (e) => {
@@ -391,7 +415,7 @@
                     id: editingId || generateId(), date: transactionDate, folio: finalFolio,
                     type: isInvoice ? 'factura' : 'publico_general', items: currentItems,
                     subtotal: subtotalGlobal, iva: ivaGlobal, retentionIsr: retIsr, total: totalGlobal,
-                    clientName: clientName || 'Público en General', rfc: isInvoice ? rfc.toUpperCase() : 'XAXX010101000',
+                    clientName: clientName || 'Público en General', rfc: isInvoice ? rfc.toUpperCase() : 'XAXX010101000', clientRegime: isInvoice ? clientRegime : '616',
                     isMoral: isInvoice && isMoralClient, cp: isInvoice ? cp : '', usoCfdi: isInvoice ? usoCfdi : 'S01',
                     salesChannel, paymentMethod, saleComments
                 };
@@ -403,9 +427,9 @@
 
             const resetSaleForm = () => {
                 setCurrentItems([]); setIsInvoice(false); setClientName('Público en General'); setRfc(''); setCp('');
-                setSaleComments(''); setSalesChannel('Tienda Física'); setPaymentMethod('Efectivo');
+                setSaleComments(''); setSalesChannel('Tienda Física'); setPaymentMethod('Efectivo'); setClientRegime('616');
                 setEditingId(null); setTransactionDate(getLocalDateString()); setFolioInput(''); 
-                setNewItem({ description: '', quantity: 1, unitPrice: 0, satKey: '01010101', unitKey: 'ACT', type: 'servicio' });
+                setNewItem({ description: '', quantity: 1, unitPrice: 0, satKey: '01010101', unitKey: 'ACT', type: 'servicio', taxRate: 0.16 });
             };
 
             const handleSaveExpense = (e) => {
@@ -464,7 +488,7 @@
                 setEditingId(item.id); setTransactionDate(item.date);
                 if (type === 'venta') {
                     setCurrentItems(item.items || []); setIsInvoice(item.type === 'factura'); setClientName(item.clientName);
-                    setRfc(item.rfc === 'XAXX010101000' && !item.isInvoice ? '' : item.rfc); setCp(item.cp || ''); setUsoCfdi(item.usoCfdi || 'G03');
+                    setRfc(item.rfc === 'XAXX010101000' && !item.isInvoice ? '' : item.rfc); setCp(item.cp || ''); setUsoCfdi(item.usoCfdi || 'G03'); setClientRegime(item.clientRegime || '616');
                     setSalesChannel(item.salesChannel || 'Tienda Física'); setPaymentMethod(item.paymentMethod || 'Efectivo'); setSaleComments(item.saleComments || '');
                     setFolioInput(item.folio.toString().padStart(3, '0')); 
                     setView('form');
@@ -575,10 +599,15 @@
             };
 
             const handleExportExcel = () => {
-                const currentMonthStr = getLocalDateString().slice(0, 7);
+                const currentMonthStr = reportMonth;
                 const mSales = sales.filter(s => s.date.startsWith(currentMonthStr));
                 const mExpenses = expenses.filter(e => e.date.startsWith(currentMonthStr));
                 
+                // Helpers para etiquetas
+                const getCatLabel = (id) => { const c = EXPENSE_CATEGORIES.find(x => x.id === id); return c ? c.label : id; };
+                const getUsoLabel = (code) => { const u = USOS_CFDI.find(x => x.code === code); return u ? u.label : code; };
+                const getRegimeLabel = (code) => { const r = FISCAL_REGIMES.find(x => x.code === code); return r ? r.label : code; };
+
                 let excelContent = `
                     <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
                     <head><meta charset="UTF-8"></head>
@@ -590,8 +619,9 @@
                         <table border="1">
                             <thead>
                                 <tr style="background-color: #d1fae5;">
-                                    <th>Fecha</th><th>Folio</th><th>Cliente</th><th>RFC</th><th>Concepto</th>
-                                    <th>Canal Venta</th><th>Método Pago</th><th>Comentarios</th>
+                                    <th>Fecha</th><th>Folio</th><th>Tipo</th><th>Cliente</th><th>RFC</th>
+                                    <th>Régimen Fiscal</th><th>CP</th><th>Uso CFDI</th>
+                                    <th>Concepto</th><th>Canal Venta</th><th>Método Pago</th><th>Comentarios</th>
                                     <th>Base</th><th>IVA</th><th>Ret. ISR</th><th>Total</th>
                                 </tr>
                             </thead>
@@ -599,8 +629,12 @@
                                 ${mSales.map(s => `<tr>
                                     <td>${formatDate(s.date)}</td>
                                     <td>${s.folio}</td>
+                                    <td>${s.type === 'factura' ? 'Factura' : 'Público General'}</td>
                                     <td>${normalizeText(s.clientName)}</td>
                                     <td>${s.rfc}</td>
+                                    <td>${normalizeText(getRegimeLabel(s.clientRegime || '616'))}</td>
+                                    <td>${s.cp || ''}</td>
+                                    <td>${normalizeText(getUsoLabel(s.usoCfdi || 'S01'))}</td>
                                     <td>${normalizeText(s.items.map(i=>i.description).join('; '))}</td>
                                     <td>${s.salesChannel || 'N/A'}</td>
                                     <td>${s.paymentMethod || 'N/A'}</td>
@@ -611,7 +645,7 @@
                                     <td>${s.total}</td>
                                 </tr>`).join('')}
                                 <tr style="font-weight:bold;">
-                                    <td colspan="8" align="right">TOTALES</td>
+                                    <td colspan="12" align="right">TOTALES</td>
                                     <td>${roundPrice(mSales.reduce((a,b)=>a+b.subtotal,0))}</td>
                                     <td>${roundPrice(mSales.reduce((a,b)=>a+b.iva,0))}</td>
                                     <td>${roundPrice(mSales.reduce((a, b) => a + (b.retentionIsr || 0), 0))}</td>
@@ -623,16 +657,21 @@
                         <h3>GASTOS</h3>
                         <table border="1">
                             <thead>
-                                <tr style="background-color: #ffe4e6;"><th>Fecha</th><th>UUID</th><th>Proveedor</th><th>RFC</th><th>Concepto</th><th>Categoría</th><th>Base</th><th>IVA</th><th>Total</th></tr>
+                                <tr style="background-color: #ffe4e6;">
+                                    <th>Fecha</th><th>UUID</th><th>Proveedor</th><th>RFC</th>
+                                    <th>Uso CFDI</th><th>Concepto</th><th>Categoría</th>
+                                    <th>Base</th><th>IVA</th><th>Total</th>
+                                </tr>
                             </thead>
                             <tbody>
                                 ${mExpenses.map(e => `<tr>
                                     <td>${formatDate(e.date)}</td><td>${e.uuid || 'N/A'}</td><td>${normalizeText(e.providerName)}</td><td>${e.rfcProvider}</td>
-                                    <td>${normalizeText(e.concept)}</td><td>${e.category}</td>
+                                    <td>${normalizeText(getUsoLabel(e.usoCfdi || 'G03'))}</td>
+                                    <td>${normalizeText(e.concept)}</td><td>${normalizeText(getCatLabel(e.category))}</td>
                                     <td>${e.subtotal}</td><td>${e.iva}</td><td>${e.total}</td>
                                 </tr>`).join('')}
                                 <tr style="font-weight:bold;">
-                                    <td colspan="6" align="right">TOTALES</td>
+                                    <td colspan="7" align="right">TOTALES</td>
                                     <td>${roundPrice(mExpenses.reduce((a,b)=>a+b.subtotal,0))}</td>
                                     <td>${roundPrice(mExpenses.reduce((a,b)=>a+b.iva,0))}</td>
                                     <td>${roundPrice(mExpenses.reduce((a,b)=>a+b.total,0))}</td>
@@ -671,13 +710,101 @@
                 document.body.removeChild(a);
             };
 
+            const handleDownloadGlobalGuide = () => {
+                if (!window.jspdf) { showAlert("Error", "Librería PDF no cargada.", "error"); return; }
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                const currentMonthStr = reportMonth;
+                
+                const globalSales = sales.filter(s => s.date.startsWith(currentMonthStr) && s.type === 'publico_general');
+                
+                if (globalSales.length === 0) { showAlert("Atención", "No hay ventas de Público General para reportar.", "warning"); return; }
+
+                const totalSub = globalSales.reduce((a,b)=>a+b.subtotal,0);
+                const totalIva = globalSales.reduce((a,b)=>a+b.iva,0);
+                const totalNeto = globalSales.reduce((a,b)=>a+b.total,0);
+
+                // Header
+                doc.setFillColor(15, 23, 42); 
+                doc.rect(0, 0, 210, 20, 'F');
+                doc.setTextColor(255, 255, 255);
+                doc.setFontSize(12);
+                doc.setFont("helvetica", "bold");
+                doc.text("GUÍA DE LLENADO - FACTURA GLOBAL (SAT)", 14, 13);
+                
+                doc.setTextColor(0, 0, 0);
+                doc.setFontSize(10);
+                doc.setFont("helvetica", "normal");
+                doc.text(`Mes de Reporte: ${currentMonthStr}`, 14, 30);
+                doc.text(`Fecha de Impresión: ${new Date().toLocaleDateString()}`, 140, 30);
+
+                // Section 1: Receptor
+                doc.setFont("helvetica", "bold");
+                doc.text("1. DATOS DEL RECEPTOR (Obligatorios)", 14, 40);
+                doc.setDrawColor(200);
+                doc.line(14, 42, 196, 42);
+                
+                doc.setFont("helvetica", "normal");
+                doc.setFontSize(9);
+                const startY = 48;
+                doc.text("RFC:", 14, startY); doc.setFont("courier", "bold"); doc.text("XAXX010101000", 40, startY); doc.setFont("helvetica", "normal");
+                doc.text("Nombre:", 14, startY+6); doc.setFont("courier", "bold"); doc.text("PUBLICO EN GENERAL", 40, startY+6); doc.setFont("helvetica", "normal");
+                doc.text("Régimen:", 14, startY+12); doc.setFont("courier", "bold"); doc.text("616 - Sin obligaciones fiscales", 40, startY+12); doc.setFont("helvetica", "normal");
+                doc.text("Uso CFDI:", 14, startY+18); doc.setFont("courier", "bold"); doc.text("S01 - Sin efectos fiscales", 40, startY+18); doc.setFont("helvetica", "normal");
+                doc.text("CP:", 120, startY); doc.setFont("courier", "bold"); doc.text(userConfig.postalCode || "[Tu Código Postal]", 140, startY); doc.setFont("helvetica", "normal");
+
+                // Section 2: Info Global
+                doc.setFont("helvetica", "bold");
+                doc.text("2. INFORMACIÓN GLOBAL", 14, startY+30);
+                doc.line(14, startY+32, 196, startY+32);
+                doc.setFont("helvetica", "normal");
+                doc.text(`Periodicidad: 04 - Mensual`, 14, startY+40);
+                doc.text(`Meses: ${currentMonthStr.split('-')[1]}`, 70, startY+40);
+                doc.text(`Año: ${currentMonthStr.split('-')[0]}`, 120, startY+40);
+
+                // Section 3: Table
+                doc.setFont("helvetica", "bold");
+                doc.text("3. CONCEPTOS (Resumen Global)", 14, startY+55);
+                
+                // Simplificado: Una sola línea con el total acumulado
+                const tableBody = [[
+                    'Venta Global del Mes', '01010101', 'ACT', '1', formatMoney(totalSub), formatMoney(totalIva), formatMoney(totalNeto)
+                ]];
+                
+                doc.autoTable({ startY: startY+60, head: [['Descripción', 'Clave Prod', 'Unidad', 'Cant', 'Valor Unitario (Subtotal)', 'IVA', 'Total']], body: tableBody, theme: 'striped', headStyles: { fillColor: [71, 85, 105] }, styles: { fontSize: 10, cellPadding: 4 }, columnStyles: { 4: { halign: 'right', fontStyle: 'bold', textColor: [22, 163, 74] }, 5: { halign: 'right' }, 6: { halign: 'right', fontStyle: 'bold' } } });
+
+                const finalY = doc.lastAutoTable.finalY + 10;
+                doc.setDrawColor(22, 163, 74); doc.setLineWidth(0.5);
+                doc.setFillColor(240, 253, 244); doc.rect(120, finalY, 76, 30, 'FD'); 
+                
+                doc.setFontSize(11); doc.setTextColor(22, 163, 74); doc.setFont("helvetica", "bold");
+                doc.text("SUBTOTAL (Dato SAT):", 125, finalY+8); doc.text(formatMoney(totalSub), 190, finalY+8, {align:'right'});
+                doc.setTextColor(0, 0, 0); doc.setFontSize(10); doc.setFont("helvetica", "normal");
+                doc.text("Total IVA:", 125, finalY+16); doc.text(formatMoney(totalIva), 190, finalY+16, {align:'right'});
+                doc.setFont("helvetica", "bold"); doc.text("GRAN TOTAL:", 125, finalY+24); doc.text(formatMoney(totalNeto), 190, finalY+24, {align:'right'});
+
+                doc.save(`Guia_Factura_Global_${currentMonthStr}.pdf`);
+            };
+
             const TaxReminder = () => {
                 const today = new Date();
-                const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+                const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+                const daysLeft = Math.ceil((lastDay - today) / (1000 * 60 * 60 * 24));
+                const isUrgent = daysLeft <= 5; 
+
                 return (
-                    <div className="bg-slate-900 dark:bg-slate-800 text-white p-3 rounded-2xl flex items-center justify-between shadow-lg shadow-slate-900/10 mb-6 no-print animate-fade-in transition-colors">
-                        <div className="flex items-center gap-3"><div className="bg-indigo-600 p-2 rounded-xl"><Bell size={18} className="text-white" /></div><div><p className="text-xs text-slate-400 font-medium uppercase">Recordatorio Fiscal</p><p className="text-sm font-semibold">Declaración de {today.toLocaleString('es-MX', { month: 'long' })}: Límite 17 de {nextMonth.toLocaleString('es-MX', { month: 'long' })}</p></div></div>
-                        <div className="bg-slate-800 px-3 py-1 rounded-lg text-xs font-mono text-indigo-300 border border-slate-700"><Clock size={12} className="inline mr-1"/> {getLocalDateString()}</div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 no-print animate-fade-in">
+                        <div className="bg-slate-900 dark:bg-slate-800 text-white p-3 rounded-2xl flex items-center gap-3 shadow-lg">
+                            <div className="bg-indigo-600 p-2 rounded-xl"><Bell size={18} /></div>
+                            <div><p className="text-xs text-slate-400 font-bold uppercase">Declaración Mensual</p><p className="text-xs font-medium">Límite día 17 del sig. mes</p></div>
+                        </div>
+                        <div className={`p-3 rounded-2xl flex items-center justify-between shadow-lg border ${isUrgent ? 'bg-rose-50 border-rose-200 text-rose-800 dark:bg-rose-900/30 dark:border-rose-800 dark:text-rose-200' : 'bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-900/30 dark:border-emerald-800 dark:text-emerald-200'}`}>
+                            <div className="flex items-center gap-3">
+                                <div className={`p-2 rounded-xl ${isUrgent ? 'bg-rose-500 text-white' : 'bg-emerald-500 text-white'}`}><AlertCircle size={18} /></div>
+                                <div><p className="text-xs opacity-80 font-bold uppercase">Cierre Factura Global</p><p className="text-xs font-bold">{isUrgent ? `¡URGENTE! Cierra el ${lastDay.getDate()}` : `Límite: ${lastDay.toLocaleDateString()}`}</p></div>
+                            </div>
+                            {isUrgent && <span className="text-[10px] font-black bg-rose-200 dark:bg-rose-800 px-2 py-1 rounded-md uppercase">Pendiente</span>}
+                        </div>
                     </div>
                 );
             };
@@ -776,9 +903,10 @@
                                     <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-end">
                                         <div className="col-span-1 md:col-span-2"><label className="block text-xs font-bold text-slate-400 uppercase mb-2 ml-1">Cantidad</label><input type="number" min="1" value={newItem.quantity} onChange={(e) => setNewItem({...newItem, quantity: e.target.value})} className="neumorphic-input w-full rounded-xl px-4 py-3 text-center font-bold text-lg" /></div>
                                         <div className="col-span-1 md:col-span-10"><label className="block text-xs font-bold text-slate-400 uppercase mb-2 ml-1">Concepto / Descripción</label><input type="text" placeholder="Ej. Tiempo Aire, Impresión..." value={newItem.description} onChange={(e) => setNewItem({...newItem, description: e.target.value})} className="neumorphic-input w-full rounded-xl px-4 py-3" /></div>
-                                        <div className="col-span-1 md:col-span-6"><label className="block text-xs font-bold text-slate-400 uppercase mb-2 ml-1">Clave SAT</label><select value={newItem.satKey} onChange={(e) => { const item = SAT_CATALOG.find(i => i.key === e.target.value); if(item) setNewItem({...newItem, satKey: item.key, type: item.type}); }} className="neumorphic-input w-full rounded-xl px-4 py-3 text-sm">{SAT_CATALOG.map(i => <option key={i.key} value={i.key}>{i.label}</option>)}</select></div>
-                                        <div className="col-span-1 md:col-span-4"><label className="block text-xs font-bold text-slate-400 uppercase mb-2 ml-1">{isInvoice ? "Precio Base" : "Precio Neto"}</label><div className="relative"><span className="absolute left-3 top-3 text-slate-400">$</span><input type="number" placeholder="0.00" value={newItem.unitPrice || ''} onChange={(e) => setNewItem({...newItem, unitPrice: parseFloat(e.target.value)})} className="neumorphic-input w-full rounded-xl pl-7 pr-3 py-3 text-right font-medium" /></div></div>
-                                        <div className="col-span-1 md:col-span-2"><button onClick={addItem} className="bg-slate-900 hover:bg-black dark:bg-indigo-600 dark:hover:bg-indigo-700 text-white w-full h-[48px] rounded-xl flex items-center justify-center shadow-lg transition-transform active:scale-95"><Plus size={24} /></button></div>
+                                        <div className="col-span-1 md:col-span-5"><label className="block text-xs font-bold text-slate-400 uppercase mb-2 ml-1">Clave SAT</label><select value={newItem.satKey} onChange={(e) => { const item = SAT_CATALOG.find(i => i.key === e.target.value); if(item) setNewItem({...newItem, satKey: item.key, type: item.type}); }} className="neumorphic-input w-full rounded-xl px-4 py-3 text-sm">{SAT_CATALOG.map(i => <option key={i.key} value={i.key}>{i.label}</option>)}</select></div>
+                                        <div className="col-span-1 md:col-span-2"><label className="block text-xs font-bold text-slate-400 uppercase mb-2 ml-1">Tasa IVA</label><select value={newItem.taxRate} onChange={(e) => setNewItem({...newItem, taxRate: parseFloat(e.target.value)})} className="neumorphic-input w-full rounded-xl px-2 py-3 text-sm text-center"><option value="0.16">16%</option><option value="0.08">8%</option><option value="0">0%</option></select></div>
+                                        <div className="col-span-1 md:col-span-3"><label className="block text-xs font-bold text-slate-400 uppercase mb-2 ml-1">{isInvoice ? "Precio Base" : "Precio Neto"}</label><div className="relative"><span className="absolute left-3 top-3 text-slate-400">$</span><input type="number" placeholder="0.00" value={newItem.unitPrice || ''} onChange={(e) => setNewItem({...newItem, unitPrice: parseFloat(e.target.value)})} className="neumorphic-input w-full rounded-xl pl-7 pr-3 py-3 text-right font-medium" /></div></div>
+                                        <div className="col-span-1 md:col-span-12 md:w-full"><button onClick={addItem} className="bg-slate-900 hover:bg-black dark:bg-indigo-600 dark:hover:bg-indigo-700 text-white w-full h-[48px] rounded-xl flex items-center justify-center shadow-lg transition-transform active:scale-95"><Plus size={24} /> Agregar Concepto</button></div>
                                     </div>
                                     {currentItems.length > 0 && (
                                         <div className="mt-8 space-y-3">
@@ -792,7 +920,7 @@
                                                                 <div className="flex flex-col sm:flex-row gap-1 sm:gap-2 text-xs text-slate-400 font-mono mt-1">
                                                                     <span>SAT: {item.satKey}</span>
                                                                     <span className="hidden sm:inline">•</span>
-                                                                    <span>Base: {formatMoney(item.subtotal)}</span>
+                                                                    <span>Base: {formatMoney(item.subtotal)} ({item.taxRate * 100}%)</span>
                                                                     <span className="hidden sm:inline">•</span>
                                                                     <span>IVA: {formatMoney(item.iva)}</span>
                                                                 </div>
@@ -824,6 +952,7 @@
                                                 <div className="md:col-span-1"><label className="block text-xs font-bold text-indigo-400 uppercase mb-2 ml-1">RFC Cliente</label><input type="text" placeholder="XAXX010101000" value={rfc} onChange={(e) => setRfc(e.target.value.toUpperCase().replace(/\s/g, ''))} maxLength={13} className={`neumorphic-input w-full rounded-xl px-4 py-3 uppercase font-mono ${rfc && !isValidRFC(rfc) ? 'error' : ''}`} required={isInvoice} /></div>
                                                 <div className="md:col-span-1"><label className="block text-xs font-bold text-indigo-400 uppercase mb-2 ml-1">Código Postal</label><input type="text" placeholder="20000" value={cp} onChange={(e) => setCp(e.target.value)} className="neumorphic-input w-full rounded-xl px-4 py-3" required={isInvoice} /></div>
                                                 <div className="md:col-span-1"><label className="block text-xs font-bold text-indigo-400 uppercase mb-2 ml-1">Uso de CFDI</label><select value={usoCfdi} onChange={(e) => setUsoCfdi(e.target.value)} className="neumorphic-input w-full rounded-xl px-4 py-3 text-sm bg-white dark:bg-slate-800">{USOS_CFDI.map(uso => <option key={uso.code} value={uso.code}>{uso.label}</option>)}</select></div>
+                                                <div className="md:col-span-3"><label className="block text-xs font-bold text-indigo-400 uppercase mb-2 ml-1">Régimen Fiscal (Receptor)</label><select value={clientRegime} onChange={(e) => setClientRegime(e.target.value)} className="neumorphic-input w-full rounded-xl px-4 py-3 text-sm bg-white dark:bg-slate-800">{FISCAL_REGIMES.map(reg => <option key={reg.code} value={reg.code}>{reg.label}</option>)}</select></div>
                                             </div>
                                         </div>
                                     )}
@@ -957,6 +1086,13 @@
                     {view === 'settings' && (
                         <main className="max-w-2xl mx-auto px-6 animate-fade-in space-y-8">
                             <div className="bg-white rounded-3xl shadow-lg border border-slate-100 p-8">
+                                <div className="flex items-center gap-3 mb-6"><div className="w-10 h-10 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600"><Building2 size={20} /></div><h2 className="text-xl font-bold text-slate-800">Datos Fiscales (Emisor)</h2></div>
+                                <form onSubmit={handleSaveConfig} className="space-y-4">
+                                    <div><label className="block text-xs font-bold text-slate-400 uppercase mb-1">Código Postal (Lugar de Expedición)</label><input type="text" value={userConfig.postalCode} onChange={(e) => setUserConfig({...userConfig, postalCode: e.target.value})} placeholder="Ej. 20000" maxLength={5} className="neumorphic-input w-full rounded-xl px-4 py-3 font-mono" /></div>
+                                    <button type="submit" className="bg-indigo-600 text-white w-full py-3 rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-md">Guardar Configuración</button>
+                                </form>
+                            </div>
+                            <div className="bg-white rounded-3xl shadow-lg border border-slate-100 p-8">
                                 <div className="flex items-center gap-3 mb-6"><div className="w-10 h-10 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600"><ShieldCheck size={20} /></div><h2 className="text-xl font-bold text-slate-800">Seguridad</h2></div>
                                 <form onSubmit={handleChangePassword} className="space-y-4">
                                     <div><label className="block text-xs font-bold text-slate-400 uppercase mb-1">Contraseña Actual</label><input type="password" value={passData.current} onChange={(e) => setPassData({...passData, current: e.target.value})} className="neumorphic-input w-full rounded-xl px-4 py-3" required /></div>
@@ -988,13 +1124,21 @@
 
                     {view === 'report' && (
                         <main className="max-w-4xl mx-auto px-6 animate-fade-in space-y-6">
-                            <div className="flex justify-end no-print">
+                            <div className="flex flex-col sm:flex-row justify-between items-center gap-4 no-print">
+                                <div className="bg-white dark:bg-slate-800 p-2 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex items-center gap-3 w-full sm:w-auto">
+                                    <div className="bg-indigo-50 dark:bg-indigo-900/30 p-2 rounded-lg text-indigo-600 dark:text-indigo-400"><Calendar size={20}/></div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-400 uppercase">Periodo de Reporte</label>
+                                        <input type="month" value={reportMonth} onChange={(e) => setReportMonth(e.target.value)} className="bg-transparent font-bold text-slate-700 dark:text-white outline-none text-sm w-full" />
+                                    </div>
+                                </div>
+                                <button onClick={handleDownloadGlobalGuide} className="bg-indigo-600 text-white border border-indigo-600 px-4 py-2 rounded-xl flex items-center gap-2 shadow-md font-bold hover:bg-indigo-700 transition-colors"><FileText size={18} /> Guía Factura Global (PDF)</button>
                                 <button onClick={handleExportExcel} className="bg-white text-emerald-600 border border-emerald-200 px-4 py-2 rounded-xl flex items-center gap-2 shadow-sm font-medium hover:bg-emerald-50 transition-colors"><FileSpreadsheet size={18} /> Exportar Reporte Mensual (Excel)</button>
                             </div>
                             <div id="report-content" className="bg-white rounded-3xl shadow-lg border border-slate-100 p-8">
-                                <div className="flex justify-between items-start mb-4 border-b border-slate-100 pb-4"><div><h1 className="text-lg font-bold text-slate-900 mb-1 report-header">REPORTE DE OPERACIONES</h1><p className="text-slate-400 text-sm font-medium report-subheader">Resumen Mensual de Operaciones</p></div><div className="text-right"><p className="text-slate-800 font-semibold text-sm">{new Date().toLocaleString('es-MX', { month: 'long', year: 'numeric' }).toUpperCase()}</p></div></div>
+                                <div className="flex justify-between items-start mb-4 border-b border-slate-100 pb-4"><div><h1 className="text-lg font-bold text-slate-900 mb-1 report-header">REPORTE DE OPERACIONES</h1><p className="text-slate-400 text-sm font-medium report-subheader">Resumen Mensual de Operaciones</p></div><div className="text-right"><p className="text-slate-800 font-semibold text-sm">{new Date(reportMonth + '-02').toLocaleString('es-MX', { month: 'long', year: 'numeric' }).toUpperCase()}</p></div></div>
                                 {(() => {
-                                    const currentMonthStr = getLocalDateString().slice(0, 7); 
+                                    const currentMonthStr = reportMonth; 
                                     const mSales = sales.filter(s => s.date.startsWith(currentMonthStr));
                                     const mExpenses = expenses.filter(e => e.date.startsWith(currentMonthStr));
                                     const totalVentasNeto = roundPrice(mSales.reduce((a,b) => a + b.subtotal, 0));
