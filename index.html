@@ -67,7 +67,7 @@
             Building2, ShoppingCart, Receipt, ArrowDownCircle, ArrowUpCircle, 
             Wallet, Bell, Clock, Database, Upload, AlertCircle, Lock, LogOut, KeyRound, 
             Settings, ShieldCheck, Store, CreditCard, MessageSquare, Edit3, Eye, Truck,
-            Users, AlertTriangle, FileSpreadsheet, CheckCircle, FileSearch
+            Users, AlertTriangle, FileSpreadsheet, CheckCircle, FileSearch, Copy
         } from 'lucide-react';
 
         // --- CATALOGOS Y DATOS ---
@@ -1153,7 +1153,12 @@
                                     return (
                                         <div className="space-y-6">
                                             <div className="grid grid-cols-3 gap-6">
-                                                <div className="p-4 bg-slate-50 rounded-xl border border-slate-100"><p className="text-xs font-bold text-slate-400 uppercase mb-1 report-card-title">Ingresos (Sin IVA)</p><p className="text-xl font-bold text-emerald-600">{formatMoney(totalVentasNeto)}</p></div>
+                                                <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 relative group">
+                                                    <div className="flex justify-between items-start">
+                                                        <div><p className="text-xs font-bold text-slate-400 uppercase mb-1 report-card-title">Ingresos (Sin IVA)</p><p className="text-xl font-bold text-emerald-600">{formatMoney(totalVentasNeto)}</p></div>
+                                                        <button onClick={() => { navigator.clipboard.writeText(totalVentasNeto.toFixed(2)); showAlert("Copiado", "Subtotal copiado al portapapeles"); }} className="p-2 bg-white rounded-lg shadow-sm text-slate-400 hover:text-emerald-600 hover:shadow-md transition-all" title="Copiar para SAT"><Copy size={16}/></button>
+                                                    </div>
+                                                </div>
                                                 <div className="p-4 bg-slate-50 rounded-xl border border-slate-100"><p className="text-xs font-bold text-slate-400 uppercase mb-1 report-card-title">Gastos (Deducibles)</p><p className="text-xl font-bold text-rose-600">{formatMoney(totalGastosNeto)}</p></div>
                                                 <div className="p-4 bg-slate-900 text-white rounded-xl shadow-sm"><p className="text-xs font-bold text-slate-400 uppercase mb-1 report-card-title">Utilidad Bruta</p><p className="text-xl font-bold text-white">{formatMoney(utilidadOperativa)}</p></div>
                                             </div>
