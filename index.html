@@ -1054,10 +1054,14 @@
                     {view === 'list' && (
                         <main className="max-w-4xl mx-auto px-6 animate-fade-in">
                             <div className="bg-white rounded-3xl shadow-lg border border-slate-100 overflow-hidden">
-                                <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                                    <h2 className="font-bold text-slate-700">Movimientos</h2>
+                                <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row justify-between items-center gap-4">
+                                    <div className="flex items-center gap-3">
+                                        <h2 className="font-bold text-slate-700">Movimientos</h2>
+                                        <div className="h-6 w-px bg-slate-300"></div>
+                                        <input type="month" value={reportMonth} onChange={(e) => setReportMonth(e.target.value)} className="bg-transparent text-slate-500 text-sm font-bold outline-none cursor-pointer hover:text-indigo-600 transition-colors" />
+                                    </div>
                                     <div className="flex gap-2 items-center">
-                                        <span className="text-xs font-bold text-slate-400 uppercase mr-1">Ordenar por:</span>
+                                        <span className="text-xs font-bold text-slate-400 uppercase mr-1">Ordenar:</span>
                                         <button onClick={() => setSortOrder('date')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${sortOrder === 'date' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>Fecha</button>
                                         <button onClick={() => setSortOrder('amount')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${sortOrder === 'amount' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>Monto</button>
                                     </div>
@@ -1067,6 +1071,7 @@
                                         <thead className="bg-slate-50 text-slate-400 text-xs uppercase font-semibold text-left"><tr><th className="px-6 py-4">Tipo</th><th className="px-6 py-4">Folio</th><th className="px-6 py-4">Fecha</th><th className="px-6 py-4">Descripción</th><th className="px-6 py-4 text-right">Monto</th><th className="px-6 py-4 text-center">Acciones</th></tr></thead>
                                         <tbody className="divide-y divide-slate-100">
                                             {[...sales.map(s=>({...s, kind:'venta'})), ...expenses.map(e=>({...e, kind:'gasto'}))]
+                                                .filter(item => item.date.startsWith(reportMonth))
                                                 .sort((a,b)=> sortOrder === 'amount' ? b.total - a.total : new Date(b.date).getTime() - new Date(a.date).getTime())
                                                 .map((item) => (
                                                 <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
