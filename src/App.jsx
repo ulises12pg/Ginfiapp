@@ -894,7 +894,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
                                     </div>
                                     <div className="overflow-x-auto">
                                         <table className="w-full text-sm text-left">
-                                            <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-xs"><tr><th className="p-4">Fecha</th><th className="p-4">Tipo</th><th className="p-4">Descripción</th><th className="p-4 text-right">Monto</th></tr></thead>
+                                            <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-xs"><tr><th className="p-4">Fecha</th><th className="p-4">Tipo</th><th className="p-4">Descripción</th><th className="p-4 text-right">Monto</th><th className="p-4 text-center">Acciones</th></tr></thead>
                                             <tbody className="divide-y divide-slate-100">
                                                 {(() => {
                                                     const combined = [...currentMonthSales.map(s => ({...s, kind: 'ingreso'})), ...currentMonthExpenses.map(e => ({...e, kind: 'egreso'}))].sort((a,b) => new Date(b.date) - new Date(a.date));
@@ -905,6 +905,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
                                                             <td className="p-4"><span className={`px-2 py-1 rounded-lg text-xs font-bold ${item.kind === 'ingreso' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>{item.kind === 'ingreso' ? 'VENTA' : 'GASTO'}</span></td>
                                                             <td className="p-4 text-slate-600">{item.kind === 'ingreso' ? (item.clientName + (item.folio ? ` (Folio: ${item.folio})` : '')) : (item.providerName + (item.uuid ? ` (UUID: ${item.uuid.slice(0,8)}...)` : ''))}</td>
                                                             <td className={`p-4 text-right font-bold ${item.kind === 'ingreso' ? 'text-emerald-600' : 'text-rose-600'}`}>{item.kind === 'ingreso' ? '+' : '-'}{formatMoney(item.total)}</td>
+                                                            <td className="p-4 flex justify-center"><button onClick={() => handleViewDetails(item, item.kind === 'ingreso' ? 'venta' : 'gasto')} className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg" title="Ver Detalles"><Eye size={18}/></button></td>
                                                         </tr>
                                                     ));
                                                 })()}
@@ -992,6 +993,13 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
                                             ))}
                                         </div>
                                     </div>
+                                    <div className="grid grid-cols-2 gap-4 text-sm">
+                                        <div><label className="text-xs font-bold text-slate-400 uppercase">Método Pago</label><p className="font-medium text-slate-800">{detailsItem.paymentMethod}</p></div>
+                                        <div><label className="text-xs font-bold text-slate-400 uppercase">Canal Venta</label><p className="font-medium text-slate-800">{detailsItem.salesChannel}</p></div>
+                                    </div>
+                                    {detailsItem.saleComments && (
+                                        <div><label className="text-xs font-bold text-slate-400 uppercase">Comentarios</label><p className="text-sm text-slate-600 bg-slate-50 p-2 rounded-lg mt-1">{detailsItem.saleComments}</p></div>
+                                    )}
                                     {detailsItem.folio && (<div className="flex items-center justify-between p-3 bg-indigo-50 rounded-xl text-indigo-700"><span className="font-bold text-sm">Folio Interno: {detailsItem.folio}</span><button onClick={() => copyToClipboard(detailsItem.folio, 'Folio')}><Copy size={16}/></button></div>)}
                                 </>
                             ) : (
