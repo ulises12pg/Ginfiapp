@@ -7,6 +7,16 @@
     <meta name="description" content="Sistema de Gestión Integral Fiscal y Control Interno v5.5">
     <title>GINFI5.5 - Gestión Integral Fiscal</title>
 
+    <script>
+        // Suprimir advertencias de consola por uso de CDNs en producción
+        const originalWarn = console.warn;
+        console.warn = function(...args) {
+            const msg = args.join(' ');
+            if (msg.includes('cdn.tailwindcss.com') || msg.includes('in-browser Babel transformer')) return;
+            originalWarn.apply(console, args);
+        };
+    </script>
+
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icon-192.png">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -43,7 +53,7 @@
     </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.23.8/babel.min.js"></script>
 </head>
 <body>
     <div id="root"></div>
@@ -280,25 +290,57 @@
                             const lastMatch = totalMatches[totalMatches.length - 1][1];
                             totalVal = parseFloat(lastMatch.replace(/,/g, ''));
                         }
-                        const ivaMatches = [...fullText.matchAll(/(?:IVA|Traslado|Impuesto)[:\s]*0?\.?160?0?%?[:\s]*\$?\s*([\d,]+\.\d{2})/gi)];
+                        
+                        // Intentar leer Subtotal explícito (Ayuda a evitar errores de IVA invertido)
+                        const subMatches = [...fullText.matchAll(/(?:Subtotal|Sub Total)[:\s]*\$?\s*([\d,]+\.\d{2})/gi)];
+                        let subVal = 0;
+                        if (subMatches.length > 0) {
+                             const lastSub = subMatches[subMatches.length - 1][1];
+                             subVal = parseFloat(lastSub.replace(/,/g, ''));
+                        }
+
+                        // Intentar leer IVA
+                        const ivaMatches = [...fullText.matchAll(/(?:IVA|Traslado|Impuesto)[:\s]*(?:0?\.?160?0?%?)?[:\s]*\$?\s*([\d,]+\.\d{2})(?!\s*%)/gi)];
                         let ivaVal = 0;
                         if (ivaMatches.length > 0) {
                              const lastIva = ivaMatches[ivaMatches.length - 1][1];
                              ivaVal = parseFloat(lastIva.replace(/,/g, ''));
-                        } else if (totalVal > 0) {
-                            const simpleIva = fullText.match(/(?:IVA|I\.V\.A\.)[:\s]*\$?\s*([\d,]+\.\d{2})/i);
-                            if(simpleIva) ivaVal = parseFloat(simpleIva[1].replace(/,/g, ''));
                         }
+                        
+                        // Lógica de reconciliación de montos
+                        if (totalVal > 0) {
+                            // Si tenemos Subtotal válido, calculamos IVA por diferencia (más seguro)
+                            if (subVal > 0 && subVal < totalVal) {
+                                ivaVal = roundPrice(totalVal - subVal);
+                            }
+                            // Si no, usamos el IVA detectado o calculamos el 16%
+                            else if (ivaVal === 0 || (ivaVal === 16 && totalVal > 100)) {
+                                ivaVal = roundPrice(totalVal - (totalVal / 1.16));
+                            }
+                            
+                            // Calcular Subtotal final
+                            let finalSub = roundPrice(totalVal - ivaVal);
 
-                        setExpenseData(prev => ({
-                            ...prev,
-                            uuid: uuidMatch ? uuidMatch[0].toUpperCase() : prev.uuid,
-                            total: totalVal > 0 ? totalVal : prev.total,
-                            iva: ivaVal > 0 ? ivaVal : (totalVal > 0 ? roundPrice(totalVal - (totalVal/1.16)) : 0),
-                            subtotal: totalVal > 0 ? roundPrice(totalVal / 1.16) : prev.subtotal,
-                            concept: "Compra según factura adjunta"
-                        }));
-                        showAlert("Factura Leída", `Datos: Total $${totalVal}, UUID detectado.`);
+                            // CORRECCIÓN: Si IVA > Subtotal, es probable que se hayan leído invertidos
+                            if (ivaVal > finalSub) {
+                                const temp = ivaVal;
+                                ivaVal = finalSub;
+                                finalSub = temp;
+                            }
+                            
+                            setExpenseData(prev => ({
+                                ...prev,
+                                uuid: uuidMatch ? uuidMatch[0].toUpperCase() : prev.uuid,
+                                total: totalVal,
+                                iva: ivaVal,
+                                subtotal: finalSub,
+                                concept: "Compra según factura adjunta"
+                            }));
+                            showAlert("Factura Leída", `Datos: Total $${totalVal}, IVA $${ivaVal}`);
+                        } else if (uuidMatch) {
+                            setExpenseData(prev => ({ ...prev, uuid: uuidMatch[0].toUpperCase() }));
+                            showAlert("Factura Leída", "Solo se detectó el UUID.");
+                        }
 
                     } else if (context === 'sales') {
                         // --- Lógica para VENTAS (Tickets CronoSys) ---

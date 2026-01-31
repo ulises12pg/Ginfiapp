@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ginfi-v5.1-cache-v1';
+const CACHE_NAME = 'ginfi-v5.1-cache-v4';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -9,7 +9,7 @@ const ASSETS_TO_CACHE = [
   './icon-512.png',
   // CDNs Críticas (Tailwind, Babel, React, Lucide)
   'https://cdn.tailwindcss.com',
-  'https://unpkg.com/@babel/standalone/babel.min.js',
+  'https://unpkg.com/@babel/standalone@7.23.8/babel.min.js',
   'https://esm.sh/react@18.2.0',
   'https://esm.sh/react-dom@18.2.0/client',
   'https://esm.sh/lucide-react@0.263.1',
