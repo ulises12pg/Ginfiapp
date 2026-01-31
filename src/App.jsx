@@ -5,7 +5,7 @@ import {
     Calculator, Download, X, Loader2, CheckCircle2, 
     ShoppingCart, Receipt, ArrowDownCircle, ArrowUpCircle, 
     Lock, LogOut, KeyRound, Settings, ShieldCheck, Store, CreditCard, MessageSquare, Edit3, Eye,
-    Users, FileSpreadsheet, FileSearch, Copy, Upload
+    Users, FileSpreadsheet, FileSearch, Copy, Upload, PieChart
 } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.js?url';
@@ -675,6 +675,17 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
                     doc.save(`Guia_Factura_Global_${currentMonthStr}.pdf`);
                 };
     
+                // Cálculos para el Dashboard (Reporte)
+                const currentMonthSales = sales.filter(s => s.date.startsWith(reportMonth));
+                const currentMonthExpenses = expenses.filter(e => e.date.startsWith(reportMonth));
+                const totalSales = currentMonthSales.reduce((acc, curr) => acc + curr.total, 0);
+                const totalExpenses = currentMonthExpenses.reduce((acc, curr) => acc + curr.total, 0);
+                const balance = totalSales - totalExpenses;
+                const globalSales = currentMonthSales.filter(s => s.type === 'publico_general');
+                const globalSubtotal = globalSales.reduce((acc, curr) => acc + curr.subtotal, 0);
+                const globalIva = globalSales.reduce((acc, curr) => acc + curr.iva, 0);
+                const globalTotal = globalSales.reduce((acc, curr) => acc + curr.total, 0);
+
     return (
         <div className="min-h-screen text-slate-800 pb-24 bg-slate-100 font-sans">
             <AlertModal alertData={alertData} />
@@ -705,6 +716,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
                                 <button onClick={() => setView('form')} className={`p-2 rounded-xl transition-all ${view === 'form' ? 'bg-indigo-100 text-indigo-700' : 'hover:bg-slate-100 text-slate-500'}`}><Plus size={20} /></button>
                                 <button onClick={() => setView('list')} className={`p-2 rounded-xl transition-all ${view === 'list' ? 'bg-indigo-100 text-indigo-700' : 'hover:bg-slate-100 text-slate-500'}`}><FileText size={20} /></button>
                                 <button onClick={() => setView('expenses')} className={`p-2 rounded-xl transition-all ${view === 'expenses' ? 'bg-indigo-100 text-indigo-700' : 'hover:bg-slate-100 text-slate-500'}`}><TrendingUp size={20} /></button>
+                                <button onClick={() => setView('report')} className={`p-2 rounded-xl transition-all ${view === 'report' ? 'bg-indigo-100 text-indigo-700' : 'hover:bg-slate-100 text-slate-500'}`}><PieChart size={20} /></button>
                                 <button onClick={() => setView('suppliers')} className={`p-2 rounded-xl transition-all ${view === 'suppliers' ? 'bg-indigo-100 text-indigo-700' : 'hover:bg-slate-100 text-slate-500'}`}><Users size={20} /></button>
                                 <button onClick={() => setView('config')} className={`p-2 rounded-xl transition-all ${view === 'config' ? 'bg-indigo-100 text-indigo-700' : 'hover:bg-slate-100 text-slate-500'}`}><Settings size={20} /></button>
                                 <div className="w-px h-6 bg-slate-200 mx-1"></div>
@@ -809,6 +821,87 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
                                         <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden"><table className="w-full text-sm text-left"><thead className="bg-slate-50 text-slate-500 font-bold uppercase text-xs"><tr><th className="p-4">Fecha</th><th className="p-4">Proveedor</th><th className="p-4">Concepto</th><th className="p-4 text-right">Monto</th><th className="p-4 text-center">Acciones</th></tr></thead><tbody className="divide-y divide-slate-100">{expenses.filter(e => e.date.startsWith(reportMonth)).sort((a,b) => new Date(b.date) - new Date(a.date)).map(exp => (<tr key={exp.id} className="hover:bg-slate-50"><td className="p-4 font-medium text-slate-600">{formatDate(exp.date)}</td><td className="p-4 font-bold text-slate-800">{exp.providerName}</td><td className="p-4 text-slate-600">{exp.concept}</td><td className="p-4 text-right font-black text-rose-600">-{formatMoney(exp.total)}</td><td className="p-4 flex justify-center gap-2"><button onClick={() => handleEdit(exp, 'gasto')} className="p-2 text-indigo-500 hover:bg-indigo-50 rounded-lg"><Edit3 size={18}/></button><button onClick={() => handleRequestDelete(exp.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={18}/></button>{deleteConfirmId === exp.id && (<div className="absolute right-10 bg-white shadow-xl border p-2 rounded-xl flex items-center gap-2 z-10"><button onClick={() => handleConfirmDelete(exp.id, 'gasto')} className="bg-red-500 text-white px-2 py-1 rounded-md text-xs">Confirmar</button></div>)}</td></tr>))}{expenses.filter(e => e.date.startsWith(reportMonth)).length === 0 && <tr><td colSpan="5" className="p-8 text-center text-slate-400">No hay gastos registrados en este periodo.</td></tr>}</tbody></table></div>
                                     </div>
                                 )}
+                            </div>
+                        )}
+
+                        {/* VISTA: REPORTE Y DASHBOARD */}
+                        {view === 'report' && (
+                            <div className="animate-fade-in space-y-6">
+                                <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                                    <h2 className="text-2xl font-black text-slate-800">Reporte Mensual</h2>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm font-bold text-slate-500">Periodo:</span>
+                                        <input type="month" value={reportMonth} onChange={(e) => setReportMonth(e.target.value)} className="neumorphic-input px-3 py-2 rounded-xl font-bold text-sm bg-white" />
+                                    </div>
+                                </div>
+
+                                {/* Dashboard Cards */}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+                                        <div className="flex items-center gap-3 mb-2"><div className="p-2 bg-emerald-100 text-emerald-600 rounded-lg"><ArrowUpCircle size={20}/></div><h3 className="font-bold text-slate-500 text-sm uppercase">Ingresos Totales</h3></div>
+                                        <p className="text-3xl font-black text-slate-800">{formatMoney(totalSales)}</p>
+                                        <p className="text-xs text-slate-400 mt-1">{currentMonthSales.length} operaciones</p>
+                                    </div>
+                                    <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+                                        <div className="flex items-center gap-3 mb-2"><div className="p-2 bg-rose-100 text-rose-600 rounded-lg"><ArrowDownCircle size={20}/></div><h3 className="font-bold text-slate-500 text-sm uppercase">Gastos Totales</h3></div>
+                                        <p className="text-3xl font-black text-slate-800">{formatMoney(totalExpenses)}</p>
+                                        <p className="text-xs text-slate-400 mt-1">{currentMonthExpenses.length} movimientos</p>
+                                    </div>
+                                    <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+                                        <div className="flex items-center gap-3 mb-2"><div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg"><PieChart size={20}/></div><h3 className="font-bold text-slate-500 text-sm uppercase">Balance Neto</h3></div>
+                                        <p className={`text-3xl font-black ${balance >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(balance)}</p>
+                                        <p className="text-xs text-slate-400 mt-1">Utilidad del periodo</p>
+                                    </div>
+                                </div>
+
+                                {/* Sección Factura Global */}
+                                <div className="bg-slate-900 text-white p-6 rounded-3xl shadow-lg relative overflow-hidden">
+                                    <div className="absolute top-0 right-0 p-4 opacity-10"><FileText size={120}/></div>
+                                    <div className="relative z-10">
+                                        <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Receipt size={20} className="text-emerald-400"/> Datos para Factura Global (Público General)</h3>
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                            <div><p className="text-slate-400 text-xs font-bold uppercase mb-1">Subtotal</p><p className="text-2xl font-bold">{formatMoney(globalSubtotal)}</p></div>
+                                            <div><p className="text-slate-400 text-xs font-bold uppercase mb-1">IVA Trasladado</p><p className="text-2xl font-bold">{formatMoney(globalIva)}</p></div>
+                                            <div>
+                                                <p className="text-slate-400 text-xs font-bold uppercase mb-1">Total a Facturar</p>
+                                                <div className="flex items-center gap-3">
+                                                    <p className="text-3xl font-black text-emerald-400">{formatMoney(globalTotal)}</p>
+                                                    <button onClick={() => { navigator.clipboard.writeText(globalTotal.toFixed(2)); showAlert('Copiado', 'Monto total copiado al portapapeles.'); }} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors" title="Copiar Monto"><Copy size={18}/></button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="mt-6 flex gap-3">
+                                            <button onClick={handleDownloadGlobalGuide} className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 transition-colors"><Download size={18}/> Descargar Guía PDF</button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Tabla Detallada */}
+                                <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+                                    <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                                        <h3 className="font-bold text-slate-800">Detalle de Operaciones</h3>
+                                        <button onClick={handleExportExcel} className="bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 transition-colors"><FileSpreadsheet size={18}/> Exportar Reporte Excel</button>
+                                    </div>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-sm text-left">
+                                            <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-xs"><tr><th className="p-4">Fecha</th><th className="p-4">Tipo</th><th className="p-4">Descripción</th><th className="p-4 text-right">Monto</th></tr></thead>
+                                            <tbody className="divide-y divide-slate-100">
+                                                {(() => {
+                                                    const combined = [...currentMonthSales.map(s => ({...s, kind: 'ingreso'})), ...currentMonthExpenses.map(e => ({...e, kind: 'egreso'}))].sort((a,b) => new Date(b.date) - new Date(a.date));
+                                                    if (combined.length === 0) return <tr><td colSpan="4" className="p-8 text-center text-slate-400">Sin movimientos en este periodo.</td></tr>;
+                                                    return combined.map(item => (
+                                                        <tr key={item.id + item.kind} className="hover:bg-slate-50">
+                                                            <td className="p-4 font-medium text-slate-600">{formatDate(item.date)}</td>
+                                                            <td className="p-4"><span className={`px-2 py-1 rounded-lg text-xs font-bold ${item.kind === 'ingreso' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>{item.kind === 'ingreso' ? 'VENTA' : 'GASTO'}</span></td>
+                                                            <td className="p-4 text-slate-600">{item.kind === 'ingreso' ? (item.clientName + (item.folio ? ` (Folio: ${item.folio})` : '')) : (item.providerName + (item.uuid ? ` (UUID: ${item.uuid.slice(0,8)}...)` : ''))}</td>
+                                                            <td className={`p-4 text-right font-bold ${item.kind === 'ingreso' ? 'text-emerald-600' : 'text-rose-600'}`}>{item.kind === 'ingreso' ? '+' : '-'}{formatMoney(item.total)}</td>
+                                                        </tr>
+                                                    ));
+                                                })()}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
                             </div>
                         )}
 
