@@ -100,6 +100,16 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
                     setTimeout(() => setAlertData(null), 4000);
                 };
     
+                const handleViewDetails = (item, type) => {
+                    setDetailsItem({ ...item, typeStr: type });
+                };
+
+                const copyToClipboard = (text, label) => {
+                    if (!text) return;
+                    navigator.clipboard.writeText(text.toString());
+                    showAlert('Copiado', `${label} copiado al portapapeles.`);
+                };
+
                 const handleLogin = (e) => {
                     e.preventDefault();
                     const storedPass = localStorage.getItem('gif4_password') || 'admin';
@@ -818,7 +828,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
                                             <span className="text-sm font-bold text-slate-500">Filtrar Mes:</span>
                                             <input type="month" value={reportMonth} onChange={(e) => setReportMonth(e.target.value)} className="neumorphic-input px-3 py-2 rounded-xl font-bold text-sm bg-white" />
                                         </div>
-                                        <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden"><table className="w-full text-sm text-left"><thead className="bg-slate-50 text-slate-500 font-bold uppercase text-xs"><tr><th className="p-4">Fecha</th><th className="p-4">Proveedor</th><th className="p-4">Concepto</th><th className="p-4 text-right">Monto</th><th className="p-4 text-center">Acciones</th></tr></thead><tbody className="divide-y divide-slate-100">{expenses.filter(e => e.date.startsWith(reportMonth)).sort((a,b) => new Date(b.date) - new Date(a.date)).map(exp => (<tr key={exp.id} className="hover:bg-slate-50"><td className="p-4 font-medium text-slate-600">{formatDate(exp.date)}</td><td className="p-4 font-bold text-slate-800">{exp.providerName}</td><td className="p-4 text-slate-600">{exp.concept}</td><td className="p-4 text-right font-black text-rose-600">-{formatMoney(exp.total)}</td><td className="p-4 flex justify-center gap-2"><button onClick={() => handleEdit(exp, 'gasto')} className="p-2 text-indigo-500 hover:bg-indigo-50 rounded-lg"><Edit3 size={18}/></button><button onClick={() => handleRequestDelete(exp.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={18}/></button>{deleteConfirmId === exp.id && (<div className="absolute right-10 bg-white shadow-xl border p-2 rounded-xl flex items-center gap-2 z-10"><button onClick={() => handleConfirmDelete(exp.id, 'gasto')} className="bg-red-500 text-white px-2 py-1 rounded-md text-xs">Confirmar</button></div>)}</td></tr>))}{expenses.filter(e => e.date.startsWith(reportMonth)).length === 0 && <tr><td colSpan="5" className="p-8 text-center text-slate-400">No hay gastos registrados en este periodo.</td></tr>}</tbody></table></div>
+                                        <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden"><table className="w-full text-sm text-left"><thead className="bg-slate-50 text-slate-500 font-bold uppercase text-xs"><tr><th className="p-4">Fecha</th><th className="p-4">Proveedor</th><th className="p-4">Concepto</th><th className="p-4 text-right">Monto</th><th className="p-4 text-center">Acciones</th></tr></thead><tbody className="divide-y divide-slate-100">{expenses.filter(e => e.date.startsWith(reportMonth)).sort((a,b) => new Date(b.date) - new Date(a.date)).map(exp => (<tr key={exp.id} className="hover:bg-slate-50"><td className="p-4 font-medium text-slate-600">{formatDate(exp.date)}</td><td className="p-4 font-bold text-slate-800">{exp.providerName}</td><td className="p-4 text-slate-600">{exp.concept}</td><td className="p-4 text-right font-black text-rose-600">-{formatMoney(exp.total)}</td><td className="p-4 flex justify-center gap-2"><button onClick={() => handleViewDetails(exp, 'gasto')} className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg" title="Ver Detalles"><Eye size={18}/></button><button onClick={() => handleEdit(exp, 'gasto')} className="p-2 text-indigo-500 hover:bg-indigo-50 rounded-lg"><Edit3 size={18}/></button><button onClick={() => handleRequestDelete(exp.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={18}/></button>{deleteConfirmId === exp.id && (<div className="absolute right-10 bg-white shadow-xl border p-2 rounded-xl flex items-center gap-2 z-10"><button onClick={() => handleConfirmDelete(exp.id, 'gasto')} className="bg-red-500 text-white px-2 py-1 rounded-md text-xs">Confirmar</button></div>)}</td></tr>))}{expenses.filter(e => e.date.startsWith(reportMonth)).length === 0 && <tr><td colSpan="5" className="p-8 text-center text-slate-400">No hay gastos registrados en este periodo.</td></tr>}</tbody></table></div>
                                     </div>
                                 )}
                             </div>
@@ -925,6 +935,91 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
                         )}
                     </div>
                 </>
+            )}
+
+            {/* MODAL DE DETALLES */}
+            {detailsItem && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden">
+                        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                            <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
+                                <Eye size={20} className="text-indigo-600"/> 
+                                Detalle de {detailsItem.typeStr === 'venta' ? 'Venta' : 'Gasto'}
+                            </h3>
+                            <button onClick={() => setDetailsItem(null)} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><X size={20}/></button>
+                        </div>
+                        <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs font-bold text-slate-400 uppercase">Fecha</label>
+                                    <p className="font-medium text-slate-800">{formatDate(detailsItem.date)}</p>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-400 uppercase">Monto Total</label>
+                                    <div className="flex items-center gap-2">
+                                        <p className={`font-black text-lg ${detailsItem.typeStr === 'venta' ? 'text-emerald-600' : 'text-rose-600'}`}>{formatMoney(detailsItem.total)}</p>
+                                        <button onClick={() => copyToClipboard(detailsItem.total, 'Monto')} className="text-slate-400 hover:text-indigo-600"><Copy size={14}/></button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {detailsItem.typeStr === 'venta' ? (
+                                <>
+                                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <div>
+                                                <label className="text-xs font-bold text-slate-400 uppercase">Cliente</label>
+                                                <p className="font-bold text-slate-800">{detailsItem.clientName}</p>
+                                            </div>
+                                            <button onClick={() => copyToClipboard(detailsItem.clientName, 'Cliente')} className="text-slate-400 hover:text-indigo-600"><Copy size={16}/></button>
+                                        </div>
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <label className="text-xs font-bold text-slate-400 uppercase">RFC</label>
+                                                <p className="font-mono text-sm text-slate-600">{detailsItem.rfc}</p>
+                                            </div>
+                                            <button onClick={() => copyToClipboard(detailsItem.rfc, 'RFC')} className="text-slate-400 hover:text-indigo-600"><Copy size={16}/></button>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-400 uppercase mb-2 block">Conceptos</label>
+                                        <div className="space-y-2">
+                                            {detailsItem.items && detailsItem.items.map((item, idx) => (
+                                                <div key={idx} className="flex justify-between text-sm p-2 bg-slate-50 rounded-lg">
+                                                    <span>{item.quantity}x {item.description}</span>
+                                                    <span className="font-bold">{formatMoney(item.total)}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    {detailsItem.folio && (<div className="flex items-center justify-between p-3 bg-indigo-50 rounded-xl text-indigo-700"><span className="font-bold text-sm">Folio Interno: {detailsItem.folio}</span><button onClick={() => copyToClipboard(detailsItem.folio, 'Folio')}><Copy size={16}/></button></div>)}
+                                </>
+                            ) : (
+                                <>
+                                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <div>
+                                                <label className="text-xs font-bold text-slate-400 uppercase">Proveedor</label>
+                                                <p className="font-bold text-slate-800">{detailsItem.providerName}</p>
+                                            </div>
+                                            <button onClick={() => copyToClipboard(detailsItem.providerName, 'Proveedor')} className="text-slate-400 hover:text-indigo-600"><Copy size={16}/></button>
+                                        </div>
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <label className="text-xs font-bold text-slate-400 uppercase">RFC</label>
+                                                <p className="font-mono text-sm text-slate-600">{detailsItem.rfcProvider}</p>
+                                            </div>
+                                            <button onClick={() => copyToClipboard(detailsItem.rfcProvider, 'RFC')} className="text-slate-400 hover:text-indigo-600"><Copy size={16}/></button>
+                                        </div>
+                                    </div>
+                                    <div><label className="text-xs font-bold text-slate-400 uppercase">Concepto General</label><div className="flex justify-between items-center mt-1"><p className="text-slate-700">{detailsItem.concept}</p><button onClick={() => copyToClipboard(detailsItem.concept, 'Concepto')} className="text-slate-400 hover:text-indigo-600"><Copy size={16}/></button></div></div>
+                                    {detailsItem.uuid && (<div className="p-3 bg-slate-100 rounded-xl"><label className="text-xs font-bold text-slate-400 uppercase block mb-1">UUID (Folio Fiscal)</label><div className="flex justify-between items-center"><p className="font-mono text-xs text-slate-600 break-all">{detailsItem.uuid}</p><button onClick={() => copyToClipboard(detailsItem.uuid, 'UUID')} className="text-slate-400 hover:text-indigo-600 ml-2"><Copy size={16}/></button></div></div>)}
+                                </>
+                            )}
+                        </div>
+                        <div className="p-4 bg-slate-50 border-t border-slate-100 text-center"><button onClick={() => setDetailsItem(null)} className="px-6 py-2 bg-slate-800 text-white rounded-xl font-bold text-sm hover:bg-slate-700 transition-colors">Cerrar</button></div>
+                    </div>
+                </div>
             )}
         </div>
     );
