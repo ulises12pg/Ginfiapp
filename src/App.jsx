@@ -5,7 +5,7 @@ import {
     Calculator, Download, X, Loader2, CheckCircle2, 
     ShoppingCart, Receipt, ArrowDownCircle, ArrowUpCircle, 
     Lock, LogOut, KeyRound, Settings, ShieldCheck, Store, CreditCard, MessageSquare, Edit3, Eye,
-    Users, FileSpreadsheet, FileSearch, Copy, Upload, PieChart
+    Users, FileSpreadsheet, FileSearch, Copy, Upload, PieChart, Search
 } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.js?url';
@@ -62,6 +62,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
     
                 const [expenseData, setExpenseData] = useState({ providerName: '', rfcProvider: '', concept: '', subtotal: 0, iva: 0, total: 0, category: 'mercancia', uuid: '' });
                 const [supplierForm, setSupplierForm] = useState({ id: null, name: '', rfc: '' });
+                const [supplierSearch, setSupplierSearch] = useState('');
                 
                 useEffect(() => {
                     const session = sessionStorage.getItem('gif4_session');
@@ -826,7 +827,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
                 <div className="min-h-screen flex items-center justify-center bg-slate-200 p-4">
                     <div className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-md text-center">
                         <div className="mb-6 flex justify-center"><div className="p-4 bg-indigo-600 rounded-2xl shadow-lg"><ShieldCheck size={48} className="text-white" /></div></div>
-                        <h1 className="text-2xl font-black text-slate-800 mb-2">GINFI 5.5</h1>
+                        <h1 className="text-2xl font-black text-slate-800 mb-2">GINFI 6.0</h1>
                         <p className="text-slate-500 mb-6">Acceso al Sistema</p>
                         <form onSubmit={handleLogin} className="space-y-4">
                             <input type="password" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} placeholder="Contraseña de acceso" className="w-full p-4 rounded-xl bg-slate-50 border border-slate-200 outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-center text-lg font-bold" />
@@ -842,7 +843,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
                         <div className="max-w-6xl mx-auto flex items-center justify-between">
                             <div className="flex items-center gap-3">
                                 <div className="bg-indigo-600 p-2 rounded-xl text-white"><Store size={20} /></div>
-                                <h1 className="font-black text-lg hidden sm:block tracking-tight text-slate-800">GINFI<span className="text-indigo-600">5.5</span></h1>
+                                <h1 className="font-black text-lg hidden sm:block tracking-tight text-slate-800">GINFI<span className="text-indigo-600">6.0</span></h1>
                             </div>
                             <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
                                 <button onClick={() => setView('form')} className={`p-2 rounded-xl transition-all ${view === 'form' ? 'bg-indigo-100 text-indigo-700' : 'hover:bg-slate-100 text-slate-500'}`}><Plus size={20} /></button>
@@ -1082,9 +1083,45 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
                         {/* VISTA: PROVEEDORES */}
                         {view === 'suppliers' && (
                             <div className="animate-fade-in space-y-6">
-                                <h2 className="text-2xl font-black text-slate-800">Directorio de Proveedores</h2>
-                                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col md:flex-row gap-4 items-end"><div className="flex-1 w-full"><label className="text-xs font-bold text-slate-400 ml-1">Nombre / Razón Social</label><input type="text" value={supplierForm.name} onChange={e => setSupplierForm({...supplierForm, name: e.target.value})} className="neumorphic-input w-full p-3 rounded-xl font-medium" /></div><div className="flex-1 w-full"><label className="text-xs font-bold text-slate-400 ml-1">RFC</label><input type="text" value={supplierForm.rfc} onChange={e => setSupplierForm({...supplierForm, rfc: e.target.value.toUpperCase()})} className="neumorphic-input w-full p-3 rounded-xl font-medium" /></div><button onClick={handleSaveSupplier} className="bg-indigo-600 text-white p-3 rounded-xl font-bold hover:bg-indigo-700 transition-colors"><Plus size={24}/></button></div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{suppliers.map(sup => (<div key={sup.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex justify-between items-center group hover:shadow-md transition-all"><div><h4 className="font-bold text-slate-800">{sup.name}</h4><p className="text-xs text-slate-500 font-mono">{sup.rfc}</p></div><div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => handleEditSupplier(sup)} className="p-2 text-indigo-500 hover:bg-indigo-50 rounded-lg"><Edit3 size={16}/></button><button onClick={() => handleDeleteSupplier(sup.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={16}/></button></div></div>))}</div>
+                                <div className="flex flex-col md:flex-row justify-between items-end md:items-center gap-4">
+                                    <div>
+                                        <h2 className="text-2xl font-black text-slate-800">Directorio de Proveedores</h2>
+                                        <p className="text-slate-500 text-sm">Gestiona tus proveedores y acreedores</p>
+                                    </div>
+                                    <div className="relative w-full md:w-72">
+                                        <span className="absolute left-3 top-3 text-slate-400"><Search size={18} /></span>
+                                        <input type="text" placeholder="Buscar por nombre o RFC..." value={supplierSearch} onChange={(e) => setSupplierSearch(e.target.value)} className="neumorphic-input w-full p-3 pl-10 rounded-xl font-medium text-sm bg-white" />
+                                    </div>
+                                </div>
+
+                                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+                                    <h3 className="font-bold text-sm text-slate-400 uppercase mb-3">{supplierForm.id ? 'Editar Proveedor' : 'Registrar Nuevo Proveedor'}</h3>
+                                    <div className="flex flex-col md:flex-row gap-4 items-end">
+                                        <div className="flex-1 w-full"><label className="text-xs font-bold text-slate-400 ml-1">Nombre / Razón Social</label><input type="text" value={supplierForm.name} onChange={e => setSupplierForm({...supplierForm, name: e.target.value})} className="neumorphic-input w-full p-3 rounded-xl font-medium" placeholder="Ej. Office Depot" /></div>
+                                        <div className="flex-1 w-full"><label className="text-xs font-bold text-slate-400 ml-1">RFC</label><input type="text" value={supplierForm.rfc} onChange={e => setSupplierForm({...supplierForm, rfc: e.target.value.toUpperCase()})} className="neumorphic-input w-full p-3 rounded-xl font-medium" placeholder="XAXX010101000" maxLength={13}/></div>
+                                        <div className="flex gap-2">
+                                            {supplierForm.id && (<button onClick={() => setSupplierForm({ id: null, name: '', rfc: '' })} className="bg-slate-100 text-slate-500 p-3 rounded-xl font-bold hover:bg-slate-200 transition-colors" title="Cancelar Edición"><X size={24}/></button>)}
+                                            <button onClick={handleSaveSupplier} className="bg-indigo-600 text-white p-3 rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200"><Save size={24}/></button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    {suppliers.filter(sup => sup.name.toLowerCase().includes(supplierSearch.toLowerCase()) || sup.rfc.toLowerCase().includes(supplierSearch.toLowerCase())).map(sup => (
+                                        <div key={sup.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex justify-between items-center group hover:shadow-md transition-all hover:border-indigo-100">
+                                            <div className="flex items-center gap-3 overflow-hidden">
+                                                <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 font-bold text-sm shrink-0">{sup.name.charAt(0).toUpperCase()}</div>
+                                                <div className="min-w-0"><h4 className="font-bold text-slate-800 truncate">{sup.name}</h4><p className="text-xs text-slate-500 font-mono truncate">{sup.rfc || 'Sin RFC'}</p></div>
+                                            </div>
+                                            <div className="flex gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button onClick={() => handleEditSupplier(sup)} className="p-2 text-indigo-500 hover:bg-indigo-50 rounded-lg transition-colors"><Edit3 size={16}/></button>
+                                                <button onClick={() => handleDeleteSupplier(sup.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16}/></button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {suppliers.length > 0 && suppliers.filter(s => s.name.toLowerCase().includes(supplierSearch.toLowerCase()) || s.rfc.toLowerCase().includes(supplierSearch.toLowerCase())).length === 0 && (<div className="col-span-full py-12 text-center"><div className="inline-flex p-4 rounded-full bg-slate-100 text-slate-400 mb-3"><Search size={32}/></div><p className="text-slate-500 font-medium">No se encontraron proveedores que coincidan con "{supplierSearch}".</p></div>)}
+                                    {suppliers.length === 0 && (<div className="col-span-full py-12 text-center"><div className="inline-flex p-4 rounded-full bg-slate-100 text-slate-400 mb-3"><Users size={32}/></div><p className="text-slate-500 font-medium">Aún no has registrado proveedores.</p></div>)}
+                                </div>
                             </div>
                         )}
 
@@ -1095,6 +1132,36 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
                                 <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100"><h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Store size={20} className="text-indigo-500"/> Datos Fiscales Emisor</h3><form onSubmit={handleSaveConfig} className="space-y-4"><div><label className="text-xs font-bold text-slate-400 ml-1">RFC Emisor</label><input type="text" value={userConfig.rfc || ''} onChange={e => setUserConfig({...userConfig, rfc: e.target.value.toUpperCase()})} className="neumorphic-input w-full p-3 rounded-xl font-medium" maxLength={13} placeholder="RFC del Contribuyente" /></div><div><label className="text-xs font-bold text-slate-400 ml-1">Código Postal (Lugar de Expedición)</label><input type="text" value={userConfig.postalCode} onChange={e => setUserConfig({...userConfig, postalCode: e.target.value})} className="neumorphic-input w-full p-3 rounded-xl font-medium" maxLength={5} /></div><button type="submit" className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl">Guardar Cambios</button></form></div>
                                 <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100"><h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Lock size={20} className="text-indigo-500"/> Seguridad</h3><form onSubmit={handleChangePassword} className="space-y-4"><input type="password" placeholder="Contraseña Actual" value={passData.current} onChange={e => setPassData({...passData, current: e.target.value})} className="neumorphic-input w-full p-3 rounded-xl" /><input type="password" placeholder="Nueva Contraseña" value={passData.new} onChange={e => setPassData({...passData, new: e.target.value})} className="neumorphic-input w-full p-3 rounded-xl" /><input type="password" placeholder="Confirmar Nueva" value={passData.confirm} onChange={e => setPassData({...passData, confirm: e.target.value})} className="neumorphic-input w-full p-3 rounded-xl" />{passMessage.text && <p className={`text-sm font-bold ${passMessage.type === 'error' ? 'text-red-500' : 'text-emerald-500'}`}>{passMessage.text}</p>}<button type="submit" className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl">Actualizar Contraseña</button></form></div>
                                 <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100"><h3 className="font-bold text-lg mb-4 flex items-center gap-2"><FileSearch size={20} className="text-indigo-500"/> Gestión de Datos</h3><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><button onClick={handleExportData} className="p-4 rounded-xl bg-slate-50 border border-slate-200 hover:bg-slate-100 text-left"><div className="font-bold text-slate-800 flex items-center gap-2"><Download size={18}/> Respaldar Todo</div><p className="text-xs text-slate-500 mt-1">Descarga un archivo JSON con toda tu información.</p></button><label className="p-4 rounded-xl bg-slate-50 border border-slate-200 hover:bg-slate-100 text-left cursor-pointer"><div className="font-bold text-slate-800 flex items-center gap-2"><Upload size={18}/> Restaurar Respaldo</div><p className="text-xs text-slate-500 mt-1">Carga un archivo JSON previamente guardado.</p><input type="file" accept=".json" className="hidden" onChange={handleImportData} /></label><button onClick={handleExportCSV} className="p-4 rounded-xl bg-emerald-50 border border-emerald-100 hover:bg-emerald-100 text-left"><div className="font-bold text-emerald-800 flex items-center gap-2"><FileSpreadsheet size={18}/> Exportar CSV</div><p className="text-xs text-emerald-600 mt-1">Formato compatible con Excel.</p></button><label className="p-4 rounded-xl bg-emerald-50 border border-emerald-100 hover:bg-emerald-100 text-left cursor-pointer"><div className="font-bold text-emerald-800 flex items-center gap-2"><FileSpreadsheet size={18}/> Importar CSV</div><p className="text-xs text-emerald-600 mt-1">Carga masiva de datos.</p><input type="file" accept=".csv" className="hidden" onChange={handleImportCSV} /></label></div></div>
+                                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+                                    <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><ShieldCheck size={20} className="text-indigo-500"/> Legal y Privacidad</h3>
+                                    <button onClick={() => setView('legal')} className="w-full p-4 rounded-xl bg-slate-50 border border-slate-200 hover:bg-slate-100 text-left transition-colors">
+                                        <div className="font-bold text-slate-800">Términos, Privacidad y Cookies</div>
+                                        <p className="text-xs text-slate-500 mt-1">Consulta los aspectos legales del uso de la aplicación.</p>
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* VISTA: LEGAL */}
+                        {view === 'legal' && (
+                            <div className="animate-fade-in space-y-6">
+                                <h2 className="text-2xl font-black text-slate-800">Aspectos Legales</h2>
+                                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 space-y-4 text-slate-600 text-sm">
+                                    <h3 className="font-bold text-lg text-slate-800">Términos y Condiciones de Uso</h3>
+                                    <p>Bienvenido a GINFI 6.0. Al utilizar esta aplicación, usted acepta estar sujeto a los siguientes términos y condiciones. Si no está de acuerdo, por favor no utilice la aplicación.</p>
+                                    <p><strong>1. Uso Aceptable:</strong> La aplicación está diseñada para la gestión de ventas, gastos y reportes fiscales. Se prohíbe su uso para fines ilícitos o no autorizados.</p>
+                                    <p><strong>2. Almacenamiento de Datos:</strong> Toda la información que usted ingresa se almacena localmente en su navegador (LocalStorage). No se transmite a servidores externos. Usted es el único responsable de la seguridad y respaldo de sus datos.</p>
+                                    <p><strong>3. Exactitud de la Información:</strong> GINFI 6.0 es una herramienta de ayuda. La exactitud de los cálculos y reportes depende de la correcta introducción de datos. No nos hacemos responsables por errores fiscales o contables derivados del uso de la aplicación. Siempre consulte a un profesional contable.</p>
+                                    <p><strong>4. Limitación de Responsabilidad:</strong> El software se proporciona "tal cual", sin garantía de ningún tipo. En ningún caso seremos responsables por cualquier reclamo, daño u otra responsabilidad que surja del uso de la aplicación.</p>
+
+                                    <h3 className="font-bold text-lg text-slate-800 pt-4 border-t mt-4">Política de Privacidad</h3>
+                                    <p>Respetamos su privacidad. GINFI 6.0 es una Aplicación Web Progresiva (PWA) que funciona 100% en su dispositivo.</p>
+                                    <p><strong>- No Recopilación de Datos Personales:</strong> No recopilamos, almacenamos ni transmitimos ninguna información personal o financiera a nuestros servidores. Todos sus datos de ventas, gastos y configuración permanecen en el almacenamiento local de su navegador.</p>
+                                    <p><strong>- Cookies:</strong> No utilizamos cookies de seguimiento ni de terceros. La aplicación puede usar cookies funcionales esenciales para mantener su sesión de usuario (sessionStorage), pero estas no contienen información personal y se eliminan al cerrar el navegador.</p>
+
+                                    <h3 className="font-bold text-lg text-slate-800 pt-4 border-t mt-4">Uso de Cookies</h3>
+                                    <p>Utilizamos `sessionStorage` para mantener su sesión activa mientras navega por la aplicación. Este almacenamiento es temporal y se borra automáticamente cuando cierra la pestaña o el navegador. No se utilizan para rastrear su actividad fuera de GINFI 6.0.</p>
+                                </div>
                             </div>
                         )}
                     </div>
@@ -1191,6 +1258,15 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
                         <div className="p-4 bg-slate-50 border-t border-slate-100 text-center"><button onClick={() => setDetailsItem(null)} className="px-6 py-2 bg-slate-800 text-white rounded-xl font-bold text-sm hover:bg-slate-700 transition-colors">Cerrar</button></div>
                     </div>
                 </div>
+            )}
+
+            {isAuthenticated && (
+                <footer className="fixed bottom-0 left-0 right-0 bg-white/50 backdrop-blur-sm border-t border-slate-200">
+                    <div className="max-w-6xl mx-auto px-4 py-2 text-xs text-slate-400 flex justify-between items-center">
+                        <p>&copy; {new Date().getFullYear()} GINFI 6.0. Todos los derechos reservados.</p>
+                        <button onClick={() => setView('legal')} className="hover:text-indigo-600 font-bold">Aspectos Legales</button>
+                    </div>
+                </footer>
             )}
         </div>
     );

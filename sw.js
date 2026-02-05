@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ginfi-v5.1-cache-v5';
+const CACHE_NAME = 'ginfi-v6.0-cache-v6';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
