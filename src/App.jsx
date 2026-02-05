@@ -636,6 +636,9 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
                     doc.setFont("helvetica", "normal");
                     doc.text(`Mes de Reporte: ${currentMonthStr}`, 14, 30);
                     doc.text(`Fecha de Impresión: ${new Date().toLocaleDateString()}`, 140, 30);
+                    if (userConfig.rfc) {
+                        doc.text(`RFC Emisor: ${userConfig.rfc}`, 14, 35);
+                    }
     
                     // Section 1: Receptor
                     doc.setFont("helvetica", "bold");
@@ -685,6 +688,103 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
                     doc.save(`Guia_Factura_Global_${currentMonthStr}.pdf`);
                 };
     
+                const handleDownloadTaxReport = () => {
+                    const doc = new jsPDF();
+                    const currentMonthStr = reportMonth;
+                    const [year, month] = currentMonthStr.split('-');
+                    const dateObj = new Date(parseInt(year), parseInt(month) - 1);
+                    const monthName = dateObj.toLocaleString('es-MX', { month: 'long' });
+
+                    const mSales = sales.filter(s => s.date.startsWith(reportMonth));
+                    const mExpenses = expenses.filter(e => e.date.startsWith(reportMonth));
+
+                    const mSubtotal = mSales.reduce((acc, curr) => acc + curr.subtotal, 0);
+                    const mIvaCollected = mSales.reduce((acc, curr) => acc + curr.iva, 0);
+                    const mRetentions = mSales.reduce((acc, curr) => acc + (curr.retentionIsr || 0), 0);
+                    
+                    const mIvaCreditable = mExpenses.reduce((acc, curr) => acc + curr.iva, 0);
+
+                    // ISR Calculation
+                    let rate = 0.01;
+                    if (mSubtotal > 208333.33) rate = 0.025;
+                    else if (mSubtotal > 83333.33) rate = 0.02;
+                    else if (mSubtotal > 50000) rate = 0.015;
+                    else if (mSubtotal > 25000) rate = 0.011;
+
+                    const isrCalculated = mSubtotal * rate;
+                    const isrToPay = Math.max(0, isrCalculated - mRetentions);
+                    const ivaToPay = mIvaCollected - mIvaCreditable;
+
+                    // Header
+                    doc.setFillColor(15, 23, 42); 
+                    doc.rect(0, 0, 210, 20, 'F');
+                    doc.setTextColor(255, 255, 255);
+                    doc.setFontSize(14);
+                    doc.setFont("helvetica", "bold");
+                    doc.text("CÁLCULO DE IMPUESTOS (RESICO)", 105, 13, { align: "center" });
+                    
+                    doc.setTextColor(0, 0, 0);
+                    doc.setFontSize(10);
+                    doc.setFont("helvetica", "normal");
+                    doc.text(`Periodo: ${monthName.toUpperCase()} ${year}`, 14, 30);
+                    doc.text(`Generado: ${new Date().toLocaleDateString()}`, 196, 30, { align: "right" });
+                    if (userConfig.rfc) {
+                        doc.text(`RFC: ${userConfig.rfc}`, 14, 35);
+                    }
+
+                    let yPos = 40;
+
+                    // ISR Table
+                    doc.setFont("helvetica", "bold");
+                    doc.text("1. IMPUESTO SOBRE LA RENTA (ISR)", 14, yPos);
+                    yPos += 5;
+                    
+                    doc.autoTable({
+                        startY: yPos,
+                        head: [['Concepto', 'Monto']],
+                        body: [
+                            ['Total de Ingresos Cobrados (Subtotal)', formatMoney(mSubtotal)],
+                            [`Tasa del Impuesto (${(rate * 100).toFixed(2)}%)`, formatMoney(isrCalculated)],
+                            ['(-) Retenciones de ISR (Personas Morales)', formatMoney(mRetentions)],
+                            ['(=) ISR a Cargo', formatMoney(isrToPay)]
+                        ],
+                        theme: 'striped',
+                        headStyles: { fillColor: [234, 88, 12], textColor: 255 }, // Orange for ISR
+                        columnStyles: { 1: { halign: 'right', fontStyle: 'bold' } }
+                    });
+                    yPos = doc.lastAutoTable.finalY + 15;
+
+                    // IVA Table
+                    doc.text("2. IMPUESTO AL VALOR AGREGADO (IVA)", 14, yPos);
+                    yPos += 5;
+
+                    doc.autoTable({
+                        startY: yPos,
+                        head: [['Concepto', 'Monto']],
+                        body: [
+                            ['IVA Trasladado (Cobrado en Ventas)', formatMoney(mIvaCollected)],
+                            ['(-) IVA Acreditable (Pagado en Gastos)', formatMoney(mIvaCreditable)],
+                            ['(=) IVA a Cargo / (A Favor)', formatMoney(ivaToPay)]
+                        ],
+                        theme: 'striped',
+                        headStyles: { fillColor: [79, 70, 229], textColor: 255 }, // Indigo for IVA
+                        columnStyles: { 1: { halign: 'right', fontStyle: 'bold' } }
+                    });
+                    yPos = doc.lastAutoTable.finalY + 15;
+
+                    // Totals
+                    doc.setFillColor(241, 245, 249);
+                    doc.rect(120, yPos, 76, 25, 'F');
+                    doc.setFontSize(12);
+                    doc.text("TOTAL A PAGAR", 158, yPos + 8, { align: "center" });
+                    doc.setFontSize(16);
+                    doc.setTextColor(22, 163, 74); // Green
+                    const totalPay = Math.max(0, isrToPay) + Math.max(0, ivaToPay);
+                    doc.text(formatMoney(totalPay), 158, yPos + 18, { align: "center" });
+
+                    doc.save(`Calculo_Impuestos_${currentMonthStr}.pdf`);
+                };
+
                 // Cálculos para el Dashboard (Reporte)
                 const currentMonthSales = sales.filter(s => s.date.startsWith(reportMonth));
                 const currentMonthExpenses = expenses.filter(e => e.date.startsWith(reportMonth));
@@ -909,6 +1009,9 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
                                         <div className={`mt-3 p-2 rounded-lg text-xs font-bold text-center ${deadlineStatus.bg} ${deadlineStatus.color}`}>
                                             Límite: 17 de {deadlineDate.toLocaleString('es-MX', { month: 'long' })} ({deadlineStatus.text})
                                         </div>
+                                        <button onClick={handleDownloadTaxReport} className="w-full mt-3 bg-slate-800 hover:bg-slate-900 text-white py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors">
+                                            <FileText size={14}/> Descargar PDF
+                                        </button>
                                     </div>
                                 </div>
 
@@ -989,7 +1092,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
                         {view === 'config' && (
                             <div className="animate-fade-in space-y-6 max-w-2xl mx-auto">
                                 <h2 className="text-2xl font-black text-slate-800">Configuración</h2>
-                                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100"><h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Store size={20} className="text-indigo-500"/> Datos Fiscales Emisor</h3><form onSubmit={handleSaveConfig} className="space-y-4"><div><label className="text-xs font-bold text-slate-400 ml-1">Código Postal (Lugar de Expedición)</label><input type="text" value={userConfig.postalCode} onChange={e => setUserConfig({...userConfig, postalCode: e.target.value})} className="neumorphic-input w-full p-3 rounded-xl font-medium" maxLength={5} /></div><button type="submit" className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl">Guardar Cambios</button></form></div>
+                                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100"><h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Store size={20} className="text-indigo-500"/> Datos Fiscales Emisor</h3><form onSubmit={handleSaveConfig} className="space-y-4"><div><label className="text-xs font-bold text-slate-400 ml-1">RFC Emisor</label><input type="text" value={userConfig.rfc || ''} onChange={e => setUserConfig({...userConfig, rfc: e.target.value.toUpperCase()})} className="neumorphic-input w-full p-3 rounded-xl font-medium" maxLength={13} placeholder="RFC del Contribuyente" /></div><div><label className="text-xs font-bold text-slate-400 ml-1">Código Postal (Lugar de Expedición)</label><input type="text" value={userConfig.postalCode} onChange={e => setUserConfig({...userConfig, postalCode: e.target.value})} className="neumorphic-input w-full p-3 rounded-xl font-medium" maxLength={5} /></div><button type="submit" className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl">Guardar Cambios</button></form></div>
                                 <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100"><h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Lock size={20} className="text-indigo-500"/> Seguridad</h3><form onSubmit={handleChangePassword} className="space-y-4"><input type="password" placeholder="Contraseña Actual" value={passData.current} onChange={e => setPassData({...passData, current: e.target.value})} className="neumorphic-input w-full p-3 rounded-xl" /><input type="password" placeholder="Nueva Contraseña" value={passData.new} onChange={e => setPassData({...passData, new: e.target.value})} className="neumorphic-input w-full p-3 rounded-xl" /><input type="password" placeholder="Confirmar Nueva" value={passData.confirm} onChange={e => setPassData({...passData, confirm: e.target.value})} className="neumorphic-input w-full p-3 rounded-xl" />{passMessage.text && <p className={`text-sm font-bold ${passMessage.type === 'error' ? 'text-red-500' : 'text-emerald-500'}`}>{passMessage.text}</p>}<button type="submit" className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl">Actualizar Contraseña</button></form></div>
                                 <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100"><h3 className="font-bold text-lg mb-4 flex items-center gap-2"><FileSearch size={20} className="text-indigo-500"/> Gestión de Datos</h3><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><button onClick={handleExportData} className="p-4 rounded-xl bg-slate-50 border border-slate-200 hover:bg-slate-100 text-left"><div className="font-bold text-slate-800 flex items-center gap-2"><Download size={18}/> Respaldar Todo</div><p className="text-xs text-slate-500 mt-1">Descarga un archivo JSON con toda tu información.</p></button><label className="p-4 rounded-xl bg-slate-50 border border-slate-200 hover:bg-slate-100 text-left cursor-pointer"><div className="font-bold text-slate-800 flex items-center gap-2"><Upload size={18}/> Restaurar Respaldo</div><p className="text-xs text-slate-500 mt-1">Carga un archivo JSON previamente guardado.</p><input type="file" accept=".json" className="hidden" onChange={handleImportData} /></label><button onClick={handleExportCSV} className="p-4 rounded-xl bg-emerald-50 border border-emerald-100 hover:bg-emerald-100 text-left"><div className="font-bold text-emerald-800 flex items-center gap-2"><FileSpreadsheet size={18}/> Exportar CSV</div><p className="text-xs text-emerald-600 mt-1">Formato compatible con Excel.</p></button><label className="p-4 rounded-xl bg-emerald-50 border border-emerald-100 hover:bg-emerald-100 text-left cursor-pointer"><div className="font-bold text-emerald-800 flex items-center gap-2"><FileSpreadsheet size={18}/> Importar CSV</div><p className="text-xs text-emerald-600 mt-1">Carga masiva de datos.</p><input type="file" accept=".csv" className="hidden" onChange={handleImportCSV} /></label></div></div>
                             </div>
