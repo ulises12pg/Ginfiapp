@@ -691,6 +691,28 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
                 const totalSales = currentMonthSales.reduce((acc, curr) => acc + curr.total, 0);
                 const totalExpenses = currentMonthExpenses.reduce((acc, curr) => acc + curr.total, 0);
                 const balance = totalSales - totalExpenses;
+
+                // Cálculos para Declaración
+                const monthlySubtotal = currentMonthSales.reduce((acc, curr) => acc + curr.subtotal, 0);
+                const monthlyRetentions = currentMonthSales.reduce((acc, curr) => acc + (curr.retentionIsr || 0), 0);
+                const monthlyIvaCreditable = currentMonthExpenses.reduce((acc, curr) => acc + curr.iva, 0);
+                
+                // Cálculo ISR RESICO 2024-2025 (Tasas Progresivas)
+                let currentIsrRate = 0.01;
+                if (monthlySubtotal > 208333.33) currentIsrRate = 0.025;
+                else if (monthlySubtotal > 83333.33) currentIsrRate = 0.02;
+                else if (monthlySubtotal > 50000) currentIsrRate = 0.015;
+                else if (monthlySubtotal > 25000) currentIsrRate = 0.011;
+
+                const estimatedIsr = monthlySubtotal * currentIsrRate;
+                const isrPayable = Math.max(0, estimatedIsr - monthlyRetentions);
+
+                // Validación de Fechas (Vencimiento día 17 del mes siguiente)
+                const [rYear, rMonth] = reportMonth.split('-').map(Number);
+                const deadlineDate = new Date(rYear, rMonth, 17); // Mes siguiente (rMonth ya es índice +1 del mes actual del reporte)
+                const daysToDeadline = Math.ceil((deadlineDate - new Date()) / (1000 * 60 * 60 * 24));
+                const deadlineStatus = daysToDeadline < 0 ? { text: 'Vencido', color: 'text-red-600', bg: 'bg-red-100' } : (daysToDeadline <= 3 ? { text: 'Por vencer', color: 'text-orange-600', bg: 'bg-orange-100' } : { text: 'A tiempo', color: 'text-emerald-600', bg: 'bg-emerald-100' });
+
                 const globalSales = currentMonthSales.filter(s => s.type === 'publico_general');
                 const globalSubtotal = globalSales.reduce((acc, curr) => acc + curr.subtotal, 0);
                 const globalIva = globalSales.reduce((acc, curr) => acc + curr.iva, 0);
@@ -846,7 +868,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
                                 </div>
 
                                 {/* Dashboard Cards */}
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                                     <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
                                         <div className="flex items-center gap-3 mb-2"><div className="p-2 bg-emerald-100 text-emerald-600 rounded-lg"><ArrowUpCircle size={20}/></div><h3 className="font-bold text-slate-500 text-sm uppercase">Ingresos Totales</h3></div>
                                         <p className="text-3xl font-black text-slate-800">{formatMoney(totalSales)}</p>
@@ -862,6 +884,32 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
                                         <p className={`text-3xl font-black ${balance >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatMoney(balance)}</p>
                                         <p className="text-xs text-slate-400 mt-1">Utilidad del periodo</p>
                                     </div>
+                                    <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+                                        <div className="flex items-center gap-3 mb-2"><div className="p-2 bg-orange-100 text-orange-600 rounded-lg"><Calculator size={20}/></div><h3 className="font-bold text-slate-500 text-sm uppercase">Declaración (RESICO)</h3></div>
+                                        <div className="space-y-2">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-xs font-bold text-slate-400">Tasa ISR ({(currentIsrRate * 100).toFixed(2)}%):</span>
+                                                <span className="font-bold text-slate-700">{formatMoney(estimatedIsr)}</span>
+                                            </div>
+                                            {monthlyRetentions > 0 && (
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-xs font-bold text-slate-400">Retenciones:</span>
+                                                    <span className="font-bold text-rose-500">-{formatMoney(monthlyRetentions)}</span>
+                                                </div>
+                                            )}
+                                            <div className="flex justify-between items-center border-t border-slate-100 pt-1">
+                                                <span className="text-xs font-bold text-slate-800">ISR a Pagar:</span>
+                                                <span className="font-bold text-slate-800">{formatMoney(isrPayable)}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-xs font-bold text-slate-400">IVA Acreditable:</span>
+                                                <span className="font-bold text-emerald-600">{formatMoney(monthlyIvaCreditable)}</span>
+                                            </div>
+                                        </div>
+                                        <div className={`mt-3 p-2 rounded-lg text-xs font-bold text-center ${deadlineStatus.bg} ${deadlineStatus.color}`}>
+                                            Límite: 17 de {deadlineDate.toLocaleString('es-MX', { month: 'long' })} ({deadlineStatus.text})
+                                        </div>
+                                    </div>
                                 </div>
 
                                 {/* Sección Factura Global */}
@@ -870,8 +918,20 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
                                     <div className="relative z-10">
                                         <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Receipt size={20} className="text-emerald-400"/> Datos para Factura Global (Público General)</h3>
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                            <div><p className="text-slate-400 text-xs font-bold uppercase mb-1">Subtotal</p><p className="text-2xl font-bold">{formatMoney(globalSubtotal)}</p></div>
-                                            <div><p className="text-slate-400 text-xs font-bold uppercase mb-1">IVA Trasladado</p><p className="text-2xl font-bold">{formatMoney(globalIva)}</p></div>
+                                            <div>
+                                                <p className="text-slate-400 text-xs font-bold uppercase mb-1">Subtotal</p>
+                                                <div className="flex items-center gap-3">
+                                                    <p className="text-2xl font-bold">{formatMoney(globalSubtotal)}</p>
+                                                    <button onClick={() => { navigator.clipboard.writeText(globalSubtotal.toFixed(2)); showAlert('Copiado', 'Subtotal copiado al portapapeles.'); }} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors" title="Copiar Subtotal"><Copy size={18}/></button>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <p className="text-slate-400 text-xs font-bold uppercase mb-1">IVA Trasladado</p>
+                                                <div className="flex items-center gap-3">
+                                                    <p className="text-2xl font-bold">{formatMoney(globalIva)}</p>
+                                                    <button onClick={() => { navigator.clipboard.writeText(globalIva.toFixed(2)); showAlert('Copiado', 'IVA copiado al portapapeles.'); }} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors" title="Copiar IVA"><Copy size={18}/></button>
+                                                </div>
+                                            </div>
                                             <div>
                                                 <p className="text-slate-400 text-xs font-bold uppercase mb-1">Total a Facturar</p>
                                                 <div className="flex items-center gap-3">
