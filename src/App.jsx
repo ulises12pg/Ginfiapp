@@ -19,6 +19,7 @@ import { StorageService } from './services/storage';
 import AlertModal from './components/ui/AlertModal';
 import DateSelector from './components/ui/DateSelector';
 import TaxReminder from './components/dashboard/TaxReminder';
+import PdfDropZone from './components/ui/PdfDropZone';
 
 // Configuración del Worker de PDF
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
@@ -33,6 +34,9 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
                 const [suppliers, setSuppliers] = useState([]);
                 const [loading, setLoading] = useState(true);
                 const [isReadingPdf, setIsReadingPdf] = useState(false);
+                const [pdfSaleResult, setPdfSaleResult] = useState(null);
+                const [isReadingExpensePdf, setIsReadingExpensePdf] = useState(false);
+                const [pdfExpenseResult, setPdfExpenseResult] = useState(null);
                 
                 const [deleteConfirmId, setDeleteConfirmId] = useState(null);
                 const [editingId, setEditingId] = useState(null); 
@@ -119,143 +123,203 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
                 };
                 const handleLogout = () => { sessionStorage.removeItem('gif4_session'); setIsAuthenticated(false); setLoginPass(''); setView('form'); };
                 
-                // --- LOGICA DE LECTURA DE PDF (Inteligente por Contexto) ---
-                const handlePdfUpload = async (e, context) => {
-                    const file = e.target.files[0];
+                // ─────────────────────────────────────────────────────
+                // MOTOR DE LECTURA DE PDF – Multi-página + Detección de Tipo
+                // ─────────────────────────────────────────────────────
+
+                /** Extrae todo el texto de un PDF (todas las páginas) */
+                const extractPdfText = async (arrayBuffer) => {
+                    const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+                    let fullText = '';
+                    for (let p = 1; p <= pdf.numPages; p++) {
+                        const page = await pdf.getPage(p);
+                        const tc = await page.getTextContent();
+                        fullText += tc.items.map(i => i.str).join(' ') + '\n';
+                    }
+                    return fullText;
+                };
+
+                /** Detecta el tipo de documento PDF a partir del texto */
+                const detectPdfType = (text) => {
+                    const upper = text.toUpperCase();
+                    // Factura SAT: tiene UUID fiscal
+                    if (/[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}/i.test(text)) {
+                        return 'sat_invoice';
+                    }
+                    // Corte de caja: palabras clave típicas
+                    const cashKeywords = ['CORTE DE CAJA', 'CIERRE DE CAJA', 'CIERRE DE TURNO', 'CORTE PARCIAL',
+                        'TOTAL VENTAS', 'TOTAL DEL DIA', 'TOTAL DE VENTAS', 'GRAN TOTAL', 'VENTA NETA',
+                        'EFECTIVO TOTAL', 'TARJETAS TOTAL', 'RESUMEN DE VENTAS', 'CORTE Z', 'REPORTE Z'];
+                    if (cashKeywords.some(kw => upper.includes(kw))) {
+                        return 'cash_register_cut';
+                    }
+                    // Ticket de venta individual
+                    return 'sale_ticket';
+                };
+
+                /** Extrae el total de un corte de caja inteligentemente */
+                const parseCashRegisterTotal = (text) => {
+                    const upper = text.toUpperCase();
+                    // Etiquetas prioritarias en orden de confianza
+                    const priorityLabels = [
+                        /(?:GRAN TOTAL|TOTAL GENERAL|VENTA NETA|TOTAL DEL DIA|IMPORTE TOTAL|TOTAL VENTAS|NETO TOTAL)[:\s$]*([\d,]+\.\d{2})/gi,
+                        /(?:TOTAL A COBRAR|TOTAL COBRADO|SUMA TOTAL)[:\s$]*([\d,]+\.\d{2})/gi,
+                        /(?:EFECTIVO TOTAL|TARJETAS TOTAL|TOTAL EFECTIVO|TOTAL TARJETAS)[:\s$]*([\d,]+\.\d{2})/gi,
+                    ];
+                    for (const regex of priorityLabels) {
+                        const matches = [...text.matchAll(regex)];
+                        if (matches.length > 0) {
+                            const val = parseFloat(matches[matches.length - 1][1].replace(/,/g, ''));
+                            if (val > 0) return val;
+                        }
+                    }
+                    // Fallback: mayor valor numérico que no parezca un folio
+                    const allNums = [...text.matchAll(/(?<![\d\/\-])([\d,]{1,12}\.\d{2})(?![\d])/g)]
+                        .map(m => parseFloat(m[1].replace(/,/g, '')))
+                        .filter(v => v > 10 && v < 10_000_000);
+                    return allNums.length > 0 ? Math.max(...allNums) : 0;
+                };
+
+                /** Extrae fecha de un bloque de texto */
+                const extractDateFromText = (text) => {
+                    const m = text.match(/(\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4})/);
+                    return m ? m[1] : '';
+                };
+
+                /** Handler genérico para cuando el usuario aporta un archivo (desde PdfDropZone) */
+                const handlePdfFile = async (file, context) => {
                     if (!file || file.type !== 'application/pdf') {
-                        showAlert("Error", "Sube un archivo PDF válido.", "error");
+                        showAlert('Error', 'Sube un archivo PDF válido.', 'error');
                         return;
                     }
-    
-                    setIsReadingPdf(true);
+
+                    if (context === 'sales') setIsReadingPdf(true);
+                    else setIsReadingExpensePdf(true);
+
                     try {
                         const arrayBuffer = await file.arrayBuffer();
-                        const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
-                        let fullText = '';
-    
-                        const page = await pdf.getPage(1);
-                        const textContent = await page.getTextContent();
-                        const items = textContent.items.map(item => item.str);
-                        fullText = items.join(' ');
-    
-                        console.log(`Texto extraído (${context}):`, fullText);
-    
+                        const fullText = await extractPdfText(arrayBuffer);
+                        console.log(`PDF extraído (${context}):`, fullText);
+
                         if (context === 'expenses') {
-                            // --- Lógica para GASTOS (Facturas SAT) ---
+                            // ── GASTOS: Facturas SAT ──
                             const uuidMatch = fullText.match(/[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}/);
                             const totalMatches = [...fullText.matchAll(/(?:Total|TOTAL|Neto)[:\s]*\$?\s*([\d,]+\.\d{2})/gi)];
                             let totalVal = 0;
-                            if (totalMatches.length > 0) {
-                                const lastMatch = totalMatches[totalMatches.length - 1][1];
-                                totalVal = parseFloat(lastMatch.replace(/,/g, ''));
-                            }
-                            
-                            // Intentar leer Subtotal explícito (Ayuda a evitar errores de IVA invertido)
-                            const subMatches = [...fullText.matchAll(/(?:Subtotal|Sub Total)[:\s]*\$?\s*([\d,]+\.\d{2})/gi)];
-                            let subVal = 0;
-                            if (subMatches.length > 0) {
-                                 const lastSub = subMatches[subMatches.length - 1][1];
-                                 subVal = parseFloat(lastSub.replace(/,/g, ''));
-                            }
-    
-                            // Intentar leer IVA
+                            if (totalMatches.length > 0) totalVal = parseFloat(totalMatches[totalMatches.length - 1][1].replace(/,/g, ''));
+
+                            const subMatches = [...fullText.matchAll(/(?:Subtotal|Sub\s*Total)[:\s]*\$?\s*([\d,]+\.\d{2})/gi)];
+                            let subVal = subMatches.length > 0 ? parseFloat(subMatches[subMatches.length - 1][1].replace(/,/g, '')) : 0;
+
                             const ivaMatches = [...fullText.matchAll(/(?:IVA|Traslado|Impuesto)[:\s]*(?:0?\.?160?0?%?)?[:\s]*\$?\s*([\d,]+\.\d{2})(?!\s*%)/gi)];
-                            let ivaVal = 0;
-                            if (ivaMatches.length > 0) {
-                                 const lastIva = ivaMatches[ivaMatches.length - 1][1];
-                                 ivaVal = parseFloat(lastIva.replace(/,/g, ''));
-                            }
-                            
-                            // Lógica de reconciliación de montos
+                            let ivaVal = ivaMatches.length > 0 ? parseFloat(ivaMatches[ivaMatches.length - 1][1].replace(/,/g, '')) : 0;
+
                             if (totalVal > 0) {
-                                // Si tenemos Subtotal válido, calculamos IVA por diferencia (más seguro)
                                 if (subVal > 0 && subVal < totalVal) {
                                     ivaVal = roundPrice(totalVal - subVal);
-                                }
-                                // Si no, usamos el IVA detectado o calculamos el 16%
-                                else if (ivaVal === 0 || (ivaVal === 16 && totalVal > 100)) {
+                                } else if (ivaVal === 0 || (ivaVal === 16 && totalVal > 100)) {
                                     ivaVal = roundPrice(totalVal - (totalVal / 1.16));
                                 }
-                                
-                                // Calcular Subtotal final
                                 let finalSub = roundPrice(totalVal - ivaVal);
-    
-                                // CORRECCIÓN: Si IVA > Subtotal, es probable que se hayan leído invertidos
-                                if (ivaVal > finalSub) {
-                                    const temp = ivaVal;
-                                    ivaVal = finalSub;
-                                    finalSub = temp;
-                                }
-                                
+                                if (ivaVal > finalSub) { const tmp = ivaVal; ivaVal = finalSub; finalSub = tmp; }
+
                                 setExpenseData(prev => ({
                                     ...prev,
                                     uuid: uuidMatch ? uuidMatch[0].toUpperCase() : prev.uuid,
-                                    total: totalVal,
-                                    iva: ivaVal,
-                                    subtotal: finalSub,
-                                    concept: "Compra según factura adjunta"
+                                    total: totalVal, iva: ivaVal, subtotal: finalSub,
+                                    concept: 'Compra según factura adjunta'
                                 }));
-                                showAlert("Factura Leída", `Datos: Total $${totalVal}, IVA $${ivaVal}`);
+                                setPdfExpenseResult({
+                                    status: 'success',
+                                    type: 'Factura SAT',
+                                    message: `Total: ${formatMoney(totalVal)} | IVA: ${formatMoney(ivaVal)} | UUID: ${uuidMatch ? uuidMatch[0].slice(0, 8) + '…' : 'No detectado'}`,
+                                });
                             } else if (uuidMatch) {
                                 setExpenseData(prev => ({ ...prev, uuid: uuidMatch[0].toUpperCase() }));
-                                showAlert("Factura Leída", "Solo se detectó el UUID.");
+                                setPdfExpenseResult({ status: 'warning', type: 'Factura SAT', message: 'UUID detectado. Ingresa los montos manualmente.' });
+                            } else {
+                                setPdfExpenseResult({ status: 'error', type: 'Desconocido', message: 'No se detectaron datos fiscales. Verifica el archivo.' });
                             }
-    
+
                         } else if (context === 'sales') {
-                            // --- Lógica para VENTAS (Tickets CronoSys) ---
-                            // 1. Buscar Folio (Soporte para alfanuméricos ej. UF-200126-542)
-                            const folioMatch = fullText.match(/(?:Folio|Ticket|Nota|Venta)[:\s]*#?([A-Z0-9\-\.]+)/i);
-                            const folioFound = folioMatch ? folioMatch[1] : '';
-    
-                            // 2. Buscar Total
-                            const totalMatches = [...fullText.matchAll(/(?:Total|Pagar|Importe|Neto)[:\s]*\$?\s*([\d,]+\.\d{2})/gi)];
+                            // ── VENTAS: Ticket o Corte de Caja ──
+                            const docType = detectPdfType(fullText);
                             let totalVal = 0;
-                            if (totalMatches.length > 0) {
-                                totalVal = parseFloat(totalMatches[totalMatches.length - 1][1].replace(/,/g, ''));
-                            }
-    
-                            // 3. Detectar Concepto (Mayor Monto)
-                            const conceptMatches = [...fullText.matchAll(/([a-zA-Z0-9ñÑ\s\.\-\/%]+)(?:\$|)\s*([\d,]+\.\d{2})/g)];
-                            let bestConcept = "Venta General";
-                            let maxConceptAmount = -1;
-                            const ignoreWords = ['TOTAL', 'SUBTOTAL', 'IVA', 'I.V.A.', 'CAMBIO', 'EFECTIVO', 'PAGAR', 'IMPORTE', 'RECIBIDO', 'SU PAGO', 'VISA', 'MASTERCARD', 'AMEX', 'DEBITO', 'CREDITO'];
-    
-                            conceptMatches.forEach(match => {
-                                let text = match[1].trim();
-                                const val = parseFloat(match[2].replace(/,/g, ''));
-                                const upper = text.toUpperCase();
-                                if (ignoreWords.some(w => upper.includes(w))) return;
-                                if (val > maxConceptAmount && (totalVal === 0 || val <= totalVal)) {
-                                    maxConceptAmount = val;
-                                    text = text.replace(/\s+/g, ' ').trim();
-                                    if (text.length > 40) text = text.split(' ').slice(-5).join(' ');
-                                    bestConcept = text;
+                            let description = 'Venta General';
+                            let docTypeLabel = 'Ticket de Venta';
+
+                            if (docType === 'cash_register_cut') {
+                                // Corte de caja: buscar total global
+                                docTypeLabel = 'Corte de Caja';
+                                totalVal = parseCashRegisterTotal(fullText);
+                                const dateFound = extractDateFromText(fullText);
+                                description = dateFound ? `Corte de Caja – ${dateFound}` : 'Corte de Caja';
+                                setSaleComments(`Corte de caja adjunto${dateFound ? ` (${dateFound})` : ''}`);
+                            } else {
+                                // Ticket / Nota de venta individual
+                                const folioMatch = fullText.match(/(?:Folio|Ticket|Nota|Venta)[:\s]*#?([A-Z0-9\-\.]+)/i);
+                                const folioFound = folioMatch ? folioMatch[1] : '';
+
+                                const totalPatterns = [
+                                    /(?:Total\s+a\s+Pagar|Importe\s+a\s+Pagar|Monto\s+Total)[:\s]*\$?\s*([\d,]+\.\d{2})/gi,
+                                    /(?:Total|Pagar|Importe|Neto)[:\s]*\$?\s*([\d,]+\.\d{2})/gi,
+                                ];
+                                for (const pat of totalPatterns) {
+                                    const ms = [...fullText.matchAll(pat)];
+                                    if (ms.length > 0) { totalVal = parseFloat(ms[ms.length - 1][1].replace(/,/g, '')); break; }
                                 }
-                            });
-    
-                            // 4. Rellenar campos
-                            if(folioFound && /^\d+$/.test(folioFound)) setFolioInput(folioFound);
-                            if(folioFound) setSaleComments(`Ref. Ticket: ${folioFound}`);
-                            const finalDesc = folioFound ? `Folio: ${folioFound}` : bestConcept;
-                            
-                            setNewItem({
-                                description: finalDesc,
+
+                                const ignoreWords = ['TOTAL', 'SUBTOTAL', 'IVA', 'CAMBIO', 'EFECTIVO', 'PAGAR', 'IMPORTE', 'RECIBIDO', 'SU PAGO', 'VISA', 'MASTERCARD', 'AMEX', 'DEBITO', 'CREDITO'];
+                                const conceptMatches = [...fullText.matchAll(/([a-zA-Z0-9ñÑ\s\.\-\/%]+)\s+([\d,]+\.\d{2})/g)];
+                                let bestConcept = 'Venta General';
+                                let maxAmt = -1;
+                                conceptMatches.forEach(m => {
+                                    let txt = m[1].trim();
+                                    const val = parseFloat(m[2].replace(/,/g, ''));
+                                    if (ignoreWords.some(w => txt.toUpperCase().includes(w))) return;
+                                    if (val > maxAmt && (totalVal === 0 || val <= totalVal)) {
+                                        maxAmt = val;
+                                        txt = txt.replace(/\s+/g, ' ').trim();
+                                        if (txt.length > 45) txt = txt.split(' ').slice(-5).join(' ');
+                                        bestConcept = txt;
+                                    }
+                                });
+
+                                if (folioFound && /^\d+$/.test(folioFound)) setFolioInput(folioFound);
+                                if (folioFound) setSaleComments(`Ref. Ticket: ${folioFound}`);
+                                description = folioFound ? `Folio: ${folioFound}` : bestConcept;
+                            }
+
+                            setNewItem(prev => ({
+                                ...prev,
+                                description,
                                 quantity: 1,
-                                unitPrice: totalVal > 0 ? totalVal : (maxConceptAmount > 0 ? maxConceptAmount : 0),
-                                satKey: '01010101', // Público general por defecto para tickets
-                                unitKey: 'ACT',
-                                type: 'servicio',
-                                taxRate: 0.16
-                            });
-    
-                            showAlert("Ticket Leído", `Concepto: ${bestConcept}, Folio: ${folioFound || 'N/A'}`);
+                                unitPrice: totalVal > 0 ? totalVal : prev.unitPrice,
+                            }));
+
+                            if (totalVal > 0) {
+                                setPdfSaleResult({
+                                    status: 'success',
+                                    type: docTypeLabel,
+                                    message: `Total detectado: ${formatMoney(totalVal)}  |  Descripción: "${description}"`,
+                                });
+                            } else {
+                                setPdfSaleResult({
+                                    status: 'warning',
+                                    type: docTypeLabel,
+                                    message: 'No se detectó un total. Verifica e ingresa el monto manualmente.',
+                                });
+                            }
                         }
-    
-                    } catch (error) {
-                        console.error(error);
-                        showAlert("Error Lectura", "No se pudo leer el PDF.", "error");
+
+                    } catch (err) {
+                        console.error('Error leyendo PDF:', err);
+                        const errResult = { status: 'error', type: 'Error', message: 'No se pudo leer el PDF. Intenta con otro archivo.' };
+                        if (context === 'sales') setPdfSaleResult(errResult);
+                        else setPdfExpenseResult(errResult);
                     } finally {
-                        setIsReadingPdf(false);
+                        if (context === 'sales') setIsReadingPdf(false);
+                        else setIsReadingExpensePdf(false);
                     }
                 };
     
@@ -332,6 +396,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
                     setSaleComments(''); setSalesChannel('Tienda Física'); setPaymentMethod('Efectivo'); setClientRegime('616');
                     setEditingId(null); setTransactionDate(getLocalDateString()); setFolioInput(''); 
                     setNewItem({ description: '', quantity: 1, unitPrice: 0, satKey: '01010101', unitKey: 'ACT', type: 'servicio', taxRate: 0.16 });
+                    setPdfSaleResult(null);
                 };
     
                 const handleSaveExpense = (e) => {
@@ -362,6 +427,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
                 const resetExpenseForm = () => {
                     setExpenseData({ providerName: '', rfcProvider: '', concept: '', subtotal: 0, iva: 0, total: 0, category: 'mercancia', uuid: '' });
                     setEditingId(null); setTransactionDate(getLocalDateString());
+                    setPdfExpenseResult(null);
                 };
     
                 const handleSaveSupplier = (e) => {
@@ -839,21 +905,40 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
             ) : (
                 <>
                     {/* Navbar */}
-                    <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200 px-4 py-3 mb-6">
+                    <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200 px-4 py-2 mb-6">
                         <div className="max-w-6xl mx-auto flex items-center justify-between">
                             <div className="flex items-center gap-3">
                                 <div className="bg-indigo-600 p-2 rounded-xl text-white"><Store size={20} /></div>
                                 <h1 className="font-black text-lg hidden sm:block tracking-tight text-slate-800">GINFI<span className="text-indigo-600">6.0</span></h1>
                             </div>
-                            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-                                <button onClick={() => setView('form')} className={`p-2 rounded-xl transition-all ${view === 'form' ? 'bg-indigo-100 text-indigo-700' : 'hover:bg-slate-100 text-slate-500'}`}><Plus size={20} /></button>
-                                <button onClick={() => setView('list')} className={`p-2 rounded-xl transition-all ${view === 'list' ? 'bg-indigo-100 text-indigo-700' : 'hover:bg-slate-100 text-slate-500'}`}><FileText size={20} /></button>
-                                <button onClick={() => setView('expenses')} className={`p-2 rounded-xl transition-all ${view === 'expenses' ? 'bg-indigo-100 text-indigo-700' : 'hover:bg-slate-100 text-slate-500'}`}><TrendingUp size={20} /></button>
-                                <button onClick={() => setView('report')} className={`p-2 rounded-xl transition-all ${view === 'report' ? 'bg-indigo-100 text-indigo-700' : 'hover:bg-slate-100 text-slate-500'}`}><PieChart size={20} /></button>
-                                <button onClick={() => setView('suppliers')} className={`p-2 rounded-xl transition-all ${view === 'suppliers' ? 'bg-indigo-100 text-indigo-700' : 'hover:bg-slate-100 text-slate-500'}`}><Users size={20} /></button>
-                                <button onClick={() => setView('config')} className={`p-2 rounded-xl transition-all ${view === 'config' ? 'bg-indigo-100 text-indigo-700' : 'hover:bg-slate-100 text-slate-500'}`}><Settings size={20} /></button>
+                            <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
+                                {[  
+                                    { key: 'form',      icon: <Plus size={18}/>,          label: 'Nueva Venta',  title: 'Nueva Venta' },
+                                    { key: 'list',      icon: <FileText size={18}/>,       label: 'Ventas',       title: 'Historial de Ventas' },
+                                    { key: 'expenses',  icon: <ArrowDownCircle size={18}/>, label: 'Gastos',       title: 'Control de Gastos' },
+                                    { key: 'report',    icon: <PieChart size={18}/>,       label: 'Reporte',      title: 'Reporte Mensual' },
+                                    { key: 'suppliers', icon: <Users size={18}/>,          label: 'Proveedores',  title: 'Directorio de Proveedores' },
+                                    { key: 'config',    icon: <Settings size={18}/>,       label: 'Config',       title: 'Configuración' },
+                                ].map(({ key, icon, label, title }) => (
+                                    <button
+                                        key={key}
+                                        onClick={() => setView(key)}
+                                        title={title}
+                                        className={`flex items-center gap-1.5 px-2 sm:px-3 py-2 rounded-xl transition-all text-xs font-bold whitespace-nowrap
+                                            ${ view === key
+                                                ? 'bg-indigo-100 text-indigo-700'
+                                                : 'hover:bg-slate-100 text-slate-500 hover:text-slate-700'
+                                            }`}
+                                    >
+                                        {icon}
+                                        <span className="hidden md:inline">{label}</span>
+                                    </button>
+                                ))}
                                 <div className="w-px h-6 bg-slate-200 mx-1"></div>
-                                <button onClick={handleLogout} className="p-2 rounded-xl hover:bg-red-50 text-slate-400 hover:text-red-500 transition-all"><LogOut size={20} /></button>
+                                <button onClick={handleLogout} title="Cerrar Sesión" className="flex items-center gap-1 px-2 py-2 rounded-xl hover:bg-red-50 text-slate-400 hover:text-red-500 transition-all text-xs font-bold">
+                                    <LogOut size={18} />
+                                    <span className="hidden md:inline">Salir</span>
+                                </button>
                             </div>
                         </div>
                     </nav>
@@ -864,14 +949,26 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
                         {/* VISTA: NUEVA VENTA */}
                         {view === 'form' && (
                             <div className="animate-fade-in space-y-6">
+                                {/* Tarjeta principal: PDF + fecha + tipo */}
                                 <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-                                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-                                        <div><h2 className="text-2xl font-black text-slate-800">Nueva Venta</h2><p className="text-slate-500 text-sm">Registra una venta o factura</p></div>
-                                        <div className="flex gap-2">
-                                            <label className="cursor-pointer bg-indigo-50 hover:bg-indigo-100 text-indigo-600 px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 transition-colors"><Upload size={16} /> Leer Ticket<input type="file" accept=".pdf" className="hidden" onChange={(e) => handlePdfUpload(e, 'sales')} /></label>
-                                            {isReadingPdf && <Loader2 className="animate-spin text-indigo-600" />}
-                                        </div>
+                                    <div className="mb-5">
+                                        <h2 className="text-2xl font-black text-slate-800">Nueva Venta</h2>
+                                        <p className="text-slate-500 text-sm">Registra una venta, ticket o corte de caja</p>
                                     </div>
+
+                                    {/* --- Zona de carga de PDF --- */}
+                                    <div className="mb-6">
+                                        <p className="text-xs font-bold uppercase text-slate-400 mb-2 tracking-wide">Adjuntar comprobante (opcional)</p>
+                                        <PdfDropZone
+                                            label="Adjuntar Ticket o Corte de Caja"
+                                            hint="Arrastra el PDF aquí o haz clic — Detecta tickets individuales y cortes de caja"
+                                            isReading={isReadingPdf}
+                                            result={pdfSaleResult}
+                                            onFile={(file) => handlePdfFile(file, 'sales')}
+                                            onReset={() => { setPdfSaleResult(null); }}
+                                        />
+                                    </div>
+
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <DateSelector transactionDate={transactionDate} setTransactionDate={setTransactionDate} dateError={dateError} />
                                         <div className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-100">
@@ -937,7 +1034,17 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
                                 <div className="flex justify-between items-center"><h2 className="text-2xl font-black text-slate-800">Control de Gastos</h2><div className="bg-slate-200 p-1 rounded-xl flex text-sm font-bold"><button onClick={() => setExpenseTab('new')} className={`px-4 py-2 rounded-lg transition-all ${expenseTab === 'new' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500'}`}>Nuevo</button><button onClick={() => setExpenseTab('list')} className={`px-4 py-2 rounded-lg transition-all ${expenseTab === 'list' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500'}`}>Historial</button></div></div>
                                 {expenseTab === 'new' && (
                                     <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-                                        <div className="flex justify-end mb-4"><label className="cursor-pointer bg-indigo-50 hover:bg-indigo-100 text-indigo-600 px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 transition-colors"><Upload size={16} /> Leer Factura (XML/PDF)<input type="file" accept=".pdf" className="hidden" onChange={(e) => handlePdfUpload(e, 'expenses')} /></label></div>
+                                        <div className="mb-5">
+                                            <p className="text-xs font-bold uppercase text-slate-400 mb-2 tracking-wide">Adjuntar factura PDF (opcional)</p>
+                                            <PdfDropZone
+                                                label="Adjuntar Factura SAT"
+                                                hint="Arrastra el PDF aquí — Detecta UUID, subtotal e IVA automáticamente"
+                                                isReading={isReadingExpensePdf}
+                                                result={pdfExpenseResult}
+                                                onFile={(file) => handlePdfFile(file, 'expenses')}
+                                                onReset={() => setPdfExpenseResult(null)}
+                                            />
+                                        </div>
                                         <DateSelector transactionDate={transactionDate} setTransactionDate={setTransactionDate} dateError={dateError} />
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4"><input type="text" placeholder="Proveedor" value={expenseData.providerName} onChange={e => setExpenseData({...expenseData, providerName: e.target.value})} className="neumorphic-input w-full p-3 rounded-xl font-medium" list="suppliers-list" /><datalist id="suppliers-list">{suppliers.map(s => <option key={s.id} value={s.name} />)}</datalist><input type="text" placeholder="RFC Proveedor" value={expenseData.rfcProvider} onChange={e => setExpenseData({...expenseData, rfcProvider: e.target.value.toUpperCase()})} className="neumorphic-input w-full p-3 rounded-xl font-medium" /></div>
                                         <input type="text" placeholder="Concepto del Gasto" value={expenseData.concept} onChange={e => setExpenseData({...expenseData, concept: e.target.value})} className="neumorphic-input w-full p-3 rounded-xl font-medium mb-4" />
