@@ -22,8 +22,8 @@ body {
 }
 
 select.neumorphic-input, select.neumorphic-input option {
-    color: #0f172a !important;
-    font-weight: 700 !important;
+    color: #3d424d !important;
+    font-weight: 600 !important;
 }
 
 .glass {
