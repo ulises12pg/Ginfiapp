@@ -1117,7 +1117,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
                                     </div>
                                 </div>
                                 <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-                                    <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><User size={20} className="text-indigo-500"/> Datos del Cliente</h3>
+                                    <h3 className="font-bold text-lg text-slate-900 mb-4 flex items-center gap-2"><User size={20} className="text-indigo-500"/> Datos del Cliente</h3>
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                         <input type="text" placeholder="Nombre / Razón Social" value={clientName} onChange={e => setClientName(e.target.value)} className="neumorphic-input w-full p-3 rounded-xl font-medium" />
                                         {isInvoice && (<><input type="text" placeholder="RFC" value={rfc} onChange={e => setRfc(e.target.value.toUpperCase())} className={`neumorphic-input w-full p-3 rounded-xl font-medium ${!isValidRFC(rfc) && rfc.length > 0 ? 'border-red-300 text-red-600' : ''}`} maxLength={13} /><input type="text" placeholder="Código Postal" value={cp} onChange={e => setCp(e.target.value)} className="neumorphic-input w-full p-3 rounded-xl font-medium" maxLength={5} /><select value={clientRegime} onChange={e => setClientRegime(e.target.value)} className="neumorphic-input w-full p-3 rounded-xl font-medium">{FISCAL_REGIMES.map(r => <option key={r.code} value={r.code}>{r.label}</option>)}</select><select value={usoCfdi} onChange={e => setUsoCfdi(e.target.value)} className="neumorphic-input w-full p-3 rounded-xl font-medium">{USOS_CFDI.map(u => <option key={u.code} value={u.code}>{u.label}</option>)}</select></>)}
@@ -1128,7 +1128,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
                                     <textarea placeholder="Comentarios de la venta..." value={saleComments} onChange={e => setSaleComments(e.target.value)} className="neumorphic-input w-full p-3 rounded-xl font-medium mt-4 h-20 resize-none" />
                                 </div>
                                 <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-                                    <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><ShoppingCart size={20} className="text-indigo-500"/> Conceptos</h3>
+                                    <h3 className="font-bold text-lg text-slate-900 mb-4 flex items-center gap-2"><ShoppingCart size={20} className="text-indigo-500"/> Conceptos</h3>
                                     <div className="flex flex-col md:flex-row gap-3 mb-4 md:items-end">
                                         <div className="flex-1 w-full">
                                             <label className="text-xs font-bold text-slate-400 ml-1">Descripción</label>

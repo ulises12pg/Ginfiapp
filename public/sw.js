@@ -15,12 +15,20 @@ const ASSETS_TO_CACHE = [
   'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap'
 ];
 
-// 1. INSTALACIÓN: Cachear recursos estáticos
+// 1. INSTALACIÓN: Cachear recursos estáticos de forma robusta
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      console.log('[Service Worker] Cacheando archivos core');
-      return cache.addAll(ASSETS_TO_CACHE);
+    caches.open(CACHE_NAME).then(async (cache) => {
+      console.log('[Service Worker] Iniciando cacheo de archivos core');
+      // Usar Promise.allSettled o un bucle para evitar que falle todo si uno falla
+      const results = await Promise.allSettled(
+        ASSETS_TO_CACHE.map(url => 
+          cache.add(url).catch(err => {
+            console.warn(`[Service Worker] No se pudo cachear: ${url}`, err);
+          })
+        )
+      );
+      console.log('[Service Worker] Proceso de cacheo finalizado');
     })
   );
   self.skipWaiting();
