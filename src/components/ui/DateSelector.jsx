@@ -8,7 +8,7 @@ const DateSelector = ({ transactionDate, setTransactionDate, dateError }) => {
             <div className={`p-2 rounded-xl ${dateError ? 'bg-red-100 text-red-600 dark:bg-red-900 dark:text-red-200' : 'bg-indigo-50 text-indigo-600 dark:bg-slate-800 dark:text-indigo-400'}`}><Calendar size={20} /></div>
             <div className="flex-1">
                 <label className={`block text-xs font-bold uppercase mb-1 ${dateError ? 'text-red-500' : 'text-slate-400'}`}>Fecha Registro {dateError && '(Futura - Inválida)'}</label>
-                <input type="date" value={transactionDate} onChange={(e) => setTransactionDate(e.target.value)} className={`w-full font-semibold outline-none bg-transparent dark:text-white ${dateError ? 'text-red-700 dark:text-red-400' : 'text-slate-700'}`}/>
+                <input type="date" value={transactionDate} onChange={(e) => setTransactionDate(e.target.value)} className={`w-full font-semibold outline-none bg-transparent dark:text-white ${dateError ? 'text-red-700 dark:text-red-400' : 'text-slate-800'}`}/>
             </div>
             {dateError && <div className="text-red-500 animate-pulse"><AlertTriangle size={20}/></div>}
         </div>
