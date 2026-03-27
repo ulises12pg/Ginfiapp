@@ -5,7 +5,7 @@ import {
     Calculator, Download, X, Loader2, CheckCircle2, 
     ShoppingCart, Receipt, ArrowDownCircle, ArrowUpCircle, 
     Lock, LogOut, KeyRound, Settings, ShieldCheck, Store, CreditCard, MessageSquare, Edit3, Eye,
-    Users, FileSpreadsheet, FileSearch, Copy, Upload, PieChart, Search
+    Users, FileSpreadsheet, FileSearch, Copy, Upload, PieChart, Search, Grid
 } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.js?url';
@@ -28,6 +28,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
                 const [isAuthenticated, setIsAuthenticated] = useState(false);
                 const [loginPass, setLoginPass] = useState('');
                 const [loginError, setLoginError] = useState('');
+                const [usePinPad, setUsePinPad] = useState(false);
                 const [view, setView] = useState('form');
                 const [sales, setSales] = useState([]);
                 const [expenses, setExpenses] = useState([]);
@@ -122,6 +123,16 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
                     else { setLoginError('Contraseña incorrecta'); setLoginPass(''); }
                 };
                 const handleLogout = () => { sessionStorage.removeItem('gif4_session'); setIsAuthenticated(false); setLoginPass(''); setView('form'); };
+                
+                const handlePinPadClick = (val) => {
+                    if (val === 'C') {
+                        setLoginPass('');
+                    } else if (val === 'DEL') {
+                        setLoginPass(prev => prev.slice(0, -1));
+                    } else {
+                        setLoginPass(prev => prev + val);
+                    }
+                };
                 
                 // ─────────────────────────────────────────────────────
                 // MOTOR DE LECTURA DE PDF – Multi-página + Detección de Tipo
@@ -886,20 +897,141 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
                 const globalTotal = globalSales.reduce((acc, curr) => acc + curr.total, 0);
 
     return (
-        <div className="min-h-screen text-slate-800 pb-24 bg-slate-100 font-sans">
+        <div className="min-h-screen text-slate-100 pb-24 bg-slate-100 font-sans">
             <AlertModal alertData={alertData} />
 
             {!isAuthenticated ? (
-                <div className="min-h-screen flex items-center justify-center bg-slate-200 p-4">
-                    <div className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-md text-center">
-                        <div className="mb-6 flex justify-center"><div className="p-4 bg-indigo-600 rounded-2xl shadow-lg"><ShieldCheck size={48} className="text-white" /></div></div>
-                        <h1 className="text-2xl font-black text-slate-800 mb-2">GINFI 6.0</h1>
-                        <p className="text-slate-500 mb-6">Acceso al Sistema</p>
-                        <form onSubmit={handleLogin} className="space-y-4">
-                            <input type="password" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} placeholder="Contraseña de acceso" className="w-full p-4 rounded-xl bg-slate-50 border border-slate-200 outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-center text-lg font-bold" />
-                            {loginError && <p className="text-red-500 text-sm font-bold animate-pulse">{loginError}</p>}
-                            <button type="submit" className="w-full py-4 rounded-xl bg-indigo-600 text-white font-bold shadow-lg hover:bg-indigo-700 transition-all transform active:scale-95">Iniciar Sesión</button>
-                        </form>
+                <div className="min-h-screen grid lg:grid-cols-2 bg-slate-100">
+                    <div className="hidden lg:flex flex-col justify-center items-center bg-indigo-900 text-white p-12 relative overflow-hidden">
+                        <div className="absolute top-0 left-0 w-full h-full opacity-10">
+                            <div className="absolute top-10 left-10 w-64 h-64 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl animate-blob"></div>
+                            <div className="absolute -bottom-8 left-20 w-64 h-64 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl animate-blob" style={{animationDelay: '4s'}}></div>
+                        </div>
+                        <div className="relative z-10 max-w-lg text-center">
+                            <div className="mb-8 inline-flex items-center justify-center p-5 bg-white/10 backdrop-blur-md rounded-3xl shadow-2xl border border-white/20">
+                                <ShieldCheck size={64} className="text-indigo-300" />
+                            </div>
+                            <h1 className="text-5xl font-black mb-6 tracking-tight">GINFI <span className="text-indigo-400">6.0</span></h1>
+                            <p className="text-xl text-indigo-100 font-light mb-8">Sistema integral de control financiero y gestión inteligente de ventas para tu negocio.</p>
+                            
+                            <div className="grid grid-cols-2 gap-4 text-left">
+                                <div className="bg-white/5 backdrop-blur-sm p-4 rounded-2xl border border-white/10">
+                                    <TrendingUp className="text-emerald-400 mb-2" size={24} />
+                                    <h3 className="font-bold text-lg">Control Total</h3>
+                                    <p className="text-sm text-indigo-200">Gestiona ingresos y gastos con precisión milimétrica.</p>
+                                </div>
+                                <div className="bg-white/5 backdrop-blur-sm p-4 rounded-2xl border border-white/10">
+                                    <FileText className="text-orange-400 mb-2" size={24} />
+                                    <h3 className="font-bold text-lg">Reportes SAT</h3>
+                                    <p className="text-sm text-indigo-200">Genera pre-cálculos para declaraciones mensuales (RESICO).</p>
+                                </div>
+                                <div className="bg-white/5 backdrop-blur-sm p-4 rounded-2xl border border-white/10">
+                                    <Grid className="text-blue-400 mb-2" size={24} />
+                                    <h3 className="font-bold text-lg">Multi-herramienta</h3>
+                                    <p className="text-sm text-indigo-200">Factura global, lectura PDF e importación fácil.</p>
+                                </div>
+                                <div className="bg-white/5 backdrop-blur-sm p-4 rounded-2xl border border-white/10">
+                                    <Lock className="text-rose-400 mb-2" size={24} />
+                                    <h3 className="font-bold text-lg">Seguro</h3>
+                                    <p className="text-sm text-indigo-200">Almacenamiento local 100% privado en tu dispositivo.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div className="flex flex-col p-6 sm:p-12 relative max-h-screen overflow-y-auto bg-slate-100 no-scrollbar">
+                        <div className="flex-1 flex flex-col justify-center items-center w-full">
+                            <div className="text-center mb-8 lg:hidden">
+                                <div className="inline-flex p-4 bg-indigo-600 rounded-3xl shadow-xl mb-4">
+                                    <ShieldCheck size={40} className="text-white" />
+                                </div>
+                                <h1 className="text-4xl font-black text-slate-800 tracking-tight">GINFI <span className="text-indigo-600">6.0</span></h1>
+                                <p className="text-slate-500 font-medium mt-1">Gestión Financiera</p>
+                            </div>
+                            
+                            <div className="bg-white p-6 sm:p-10 rounded-[2.5rem] shadow-xl border border-slate-100 w-full max-w-md">
+                                <div className="text-center mb-8">
+                                    <h2 className="text-2xl font-bold text-slate-800">Inicia Sesión</h2>
+                                    <p className="text-slate-500 text-sm mt-2">Ingresa tu código de acceso para continuar</p>
+                                </div>
+                                
+                                <form onSubmit={handleLogin} className="space-y-4 sm:space-y-6">
+                                    <div className="relative">
+                                        <input
+                                            type="password"
+                                            value={loginPass}
+                                            onChange={(e) => setLoginPass(e.target.value)}
+                                            placeholder="Contraseña..."
+                                            className={`w-full p-4 pl-12 rounded-2xl bg-slate-50 border outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all font-bold text-slate-700 text-lg tracking-widest placeholder:tracking-normal ${loginError ? 'border-red-300' : 'border-slate-200'}`}
+                                            readOnly={usePinPad}
+                                        />
+                                        <Lock size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                                    </div>
+                                    
+                                    {loginError && <p className="text-red-500 text-sm font-bold text-center bg-red-50 p-2 rounded-xl animate-pulse">{loginError}</p>}
+                                    
+                                    {usePinPad && (
+                                        <div className="grid grid-cols-3 gap-2 sm:gap-3 animate-fade-in my-4 sm:my-6">
+                                            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
+                                                <button
+                                                    key={num}
+                                                    type="button"
+                                                    onClick={() => handlePinPadClick(num.toString())}
+                                                    className="h-12 sm:h-14 bg-slate-50 hover:bg-slate-100 border border-slate-100 rounded-2xl text-xl font-bold text-slate-700 transition-colors shadow-sm active:scale-95 flex items-center justify-center"
+                                                >
+                                                    {num}
+                                                </button>
+                                            ))}
+                                            <button
+                                                type="button"
+                                                onClick={() => handlePinPadClick('C')}
+                                                className="h-12 sm:h-14 bg-rose-50 hover:bg-rose-100 border border-rose-100 rounded-2xl text-lg font-bold text-rose-600 transition-colors shadow-sm active:scale-95 flex items-center justify-center"
+                                            >
+                                                C
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => handlePinPadClick('0')}
+                                                className="h-12 sm:h-14 bg-slate-50 hover:bg-slate-100 border border-slate-100 rounded-2xl text-xl font-bold text-slate-700 transition-colors shadow-sm active:scale-95 flex items-center justify-center"
+                                            >
+                                                0
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => handlePinPadClick('DEL')}
+                                                className="h-12 sm:h-14 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-2xl flex items-center justify-center text-slate-600 transition-colors shadow-sm active:scale-95"
+                                            >
+                                                <span className="font-bold text-xl">⌫</span>
+                                            </button>
+                                        </div>
+                                    )}
+                                    
+                                    <div className="flex flex-col gap-3 sm:gap-4 mt-6 sm:mt-8">
+                                        <button
+                                            type="submit"
+                                            className="w-full py-3 sm:py-4 rounded-2xl bg-slate-900 text-white font-bold shadow-xl shadow-slate-900/20 hover:bg-slate-800 transition-all transform active:scale-95 focus:ring-4 focus:ring-slate-900/30 flex items-center justify-center gap-2"
+                                        >
+                                            Acceder <div className="bg-slate-700 p-1 rounded-full"><TrendingUp size={16}/></div>
+                                        </button>
+                                        
+                                        <button
+                                            type="button"
+                                            onClick={() => setUsePinPad(!usePinPad)}
+                                            className="w-full py-3 rounded-xl bg-indigo-50 text-indigo-600 font-bold hover:bg-indigo-100 transition-colors flex items-center justify-center gap-2 text-sm"
+                                        >
+                                            {usePinPad ? <><Lock size={16}/> Usar Teclado Normal</> : <><Grid size={16}/> Usar PinPad Numérico</>}
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                        
+                        <div className="w-full mt-auto pt-8 items-center justify-between text-xs text-slate-400 flex flex-col md:flex-row gap-2 max-w-md mx-auto lg:max-w-full">
+                            <p className="font-medium text-center">&copy; {new Date().getFullYear()} GINFI 6.0. Todos los derechos reservados.</p>
+                            <button onClick={() => showAlert('Aviso Legal', 'Inicia sesión para ver los términos y condiciones completos de privacidad y uso local.', 'info')} className="hover:text-indigo-600 font-bold transition-colors">
+                                Aspectos Legales
+                            </button>
+                        </div>
                     </div>
                 </div>
             ) : (
@@ -997,11 +1129,28 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
                                 </div>
                                 <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
                                     <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><ShoppingCart size={20} className="text-indigo-500"/> Conceptos</h3>
-                                    <div className="flex flex-col md:flex-row gap-3 mb-4 items-end">
-                                        <div className="flex-1 w-full"><label className="text-xs font-bold text-slate-400 ml-1">Descripción</label><input type="text" value={newItem.description} onChange={e => setNewItem({...newItem, description: e.target.value})} className="neumorphic-input w-full p-3 rounded-xl font-medium" placeholder="Producto o Servicio" /></div>
-                                        <div className="w-24"><label className="text-xs font-bold text-slate-400 ml-1">Cant.</label><input type="number" value={newItem.quantity} onChange={e => setNewItem({...newItem, quantity: e.target.value})} className="neumorphic-input w-full p-3 rounded-xl font-medium text-center" /></div>
-                                        <div className="w-32"><label className="text-xs font-bold text-slate-400 ml-1">Precio Unit.</label><input type="number" value={newItem.unitPrice} onChange={e => setNewItem({...newItem, unitPrice: e.target.value})} className="neumorphic-input w-full p-3 rounded-xl font-medium text-right" /></div>
-                                        <button onClick={addItem} className="bg-indigo-600 hover:bg-indigo-700 text-white p-3 rounded-xl transition-colors"><Plus size={24} /></button>
+                                    <div className="flex flex-col md:flex-row gap-3 mb-4 md:items-end">
+                                        <div className="flex-1 w-full">
+                                            <label className="text-xs font-bold text-slate-400 ml-1">Descripción</label>
+                                            <input type="text" value={newItem.description} onChange={e => setNewItem({...newItem, description: e.target.value})} className="neumorphic-input w-full p-3 rounded-xl font-medium" placeholder="Producto o Servicio" />
+                                        </div>
+                                        <div className="flex flex-row gap-2 sm:gap-3 items-end w-full md:w-auto">
+                                            <div className="w-28 sm:w-32">
+                                                <label className="text-xs font-bold text-slate-400 ml-1 block">Cant.</label>
+                                                <div className="flex items-center bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm h-[48px]">
+                                                    <button type="button" onClick={() => setNewItem({...newItem, quantity: Math.max(1, (parseInt(newItem.quantity) || 1) - 1)})} className="px-3 h-full text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors bg-slate-50 font-bold border-r border-slate-200">-</button>
+                                                    <input type="number" value={newItem.quantity} onChange={e => setNewItem({...newItem, quantity: e.target.value})} className="w-full text-center bg-transparent py-2 font-bold text-slate-700 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                                                    <button type="button" onClick={() => setNewItem({...newItem, quantity: (parseInt(newItem.quantity) || 1) + 1})} className="px-3 h-full text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors bg-slate-50 font-bold border-l border-slate-200">+</button>
+                                                </div>
+                                            </div>
+                                            <div className="flex-1 md:w-32">
+                                                <label className="text-xs font-bold text-slate-400 ml-1 block">Precio Unit.</label>
+                                                <input type="number" value={newItem.unitPrice} onChange={e => setNewItem({...newItem, unitPrice: e.target.value})} className="neumorphic-input w-full p-3 rounded-xl font-medium text-right h-[48px]" placeholder="0.00" />
+                                            </div>
+                                            <button onClick={addItem} className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-all shadow-md active:scale-95 shrink-0 h-[48px] w-[48px] flex justify-center items-center">
+                                                <Plus size={24} />
+                                            </button>
+                                        </div>
                                     </div>
                                     {currentItems.length > 0 && (<div className="space-y-2 mb-6">{currentItems.map((item, idx) => (<div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100 text-sm"><div className="flex-1"><p className="font-bold text-slate-700">{item.description}</p><p className="text-xs text-slate-500">{item.quantity} x {formatMoney(item.unitPrice)} {isInvoice && `(+IVA)`}</p></div><div className="flex items-center gap-4"><span className="font-bold text-slate-800">{formatMoney(item.total)}</span><button onClick={() => setCurrentItems(currentItems.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600"><X size={18} /></button></div></div>))}</div>)}
                                     {currentItems.length > 0 && (<div className="bg-slate-900 text-white p-6 rounded-2xl shadow-lg"><div className="flex justify-between items-center mb-2 text-slate-400 text-sm"><span>Subtotal</span><span>{formatMoney(currentItems.reduce((a,b)=>a+b.subtotal,0))}</span></div><div className="flex justify-between items-center mb-4 text-slate-400 text-sm"><span>IVA (16%)</span><span>{formatMoney(currentItems.reduce((a,b)=>a+b.iva,0))}</span></div>{isInvoice && isMoralClient && <div className="flex justify-between items-center mb-4 text-orange-400 text-sm"><span>Ret. ISR</span><span>-{formatMoney(currentItems.reduce((a,b)=>a+b.subtotal,0)*0.0125)}</span></div>}<div className="flex justify-between items-center pt-4 border-t border-slate-700"><span className="text-xl font-bold">Total Neto</span><span className="text-3xl font-black text-emerald-400">{formatMoney(currentItems.reduce((a,b)=>a+b.total,0) - (isInvoice && isMoralClient ? currentItems.reduce((a,b)=>a+b.subtotal,0)*0.0125 : 0))}</span></div><button onClick={handleSaveSale} className="w-full mt-6 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-4 rounded-xl shadow-lg transition-all transform active:scale-95 flex items-center justify-center gap-2"><Save size={20} /> {editingId ? 'Actualizar Venta' : 'Registrar Venta'}</button></div>)}
